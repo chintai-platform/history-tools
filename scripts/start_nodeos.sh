@@ -32,6 +32,8 @@ else
     cp config.ini "${CONFIG_DIR}/config.ini"
     cp genesis.json "${CONFIG_DIR}/genesis.json"
 
+    sed -i 's/__USER__/'"${USER}"'/g' "${CONFIG_DIR}/config.ini"
+
     nodeos \
         --config-dir "${CONFIG_DIR}" \
         --data-dir "${DATA_DIR}" \

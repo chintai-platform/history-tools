@@ -7,6 +7,7 @@ BASE_DIR=/home/${USER}/nodeos-ht
 CONFIG_DIR="${BASE_DIR}/config"
 DATA_DIR="${BASE_DIR}/data"
 LOG_DIR="${BASE_DIR}/log"
+SHPDATA_DIR="${BASE_DIR}/shpdata"
 
 if [ -f "${DATA_DIR}/eosd.pid" ]; then
     echo "nodeos is already run"
@@ -22,6 +23,10 @@ else
 
     if [ ! -d "${LOG_DIR}" ]; then
         mkdir -p "${LOG_DIR}"
+    fi
+
+    if [ ! -d "${SHPDATA_DIR}" ]; then
+        mkdir -p "${SHPDATA_DIR}"
     fi
 
     cp config.ini "${CONFIG_DIR}/config.ini"

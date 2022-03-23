@@ -1,0 +1,37 @@
+#!/bin/bash
+
+set -e
+
+BASE_DIR=/home/nash/nodeos-ht
+
+CONFIG_DIR="${BASE_DIR}/config"
+DATA_DIR="${BASE_DIR}/data"
+LOG_DIR="${BASE_DIR}/log"
+
+if [ -f "${DATA_DIR}/eosd.pid" ]; then
+    echo "nodeos is already run"
+else
+
+    if [ ! -d "${CONFIG_DIR}" ]; then
+        mkdir -p "${CONFIG_DIR}"
+    fi
+
+    if [ ! -d "${DATA_DIR}" ]; then
+        mkdir -p "${DATA_DIR}"
+    fi
+
+    if [ ! -d "${LOG_DIR}" ]; then
+        mkdir -p "${LOG_DIR}"
+    fi
+
+    cp config.ini "${CONFIG_DIR}/config.ini"
+    cp genesis.json "${CONFIG_DIR}/genesis.json"
+
+    nodeos \
+        --config-dir "${CONFIG_DIR}" \
+        --data-dir "${DATA_DIR}" \
+        --disable-replay-opts \
+        --genesis-json "${CONFIG_DIR}"/genesis.json \
+        >> "${LOG_DIR}"/nodeos.log 2>&1 & \
+        echo $! > "${DATA_DIR}/eosd.pid"
+fi

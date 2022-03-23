@@ -2,7 +2,7 @@
 
 set -e
 
-BASE_DIR=/home/nash/nodeos-ht
+BASE_DIR=/home/${USER}/nodeos-ht
 
 CONFIG_DIR="${BASE_DIR}/config"
 DATA_DIR="${BASE_DIR}/data"

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-./status.sh | grep "Nodeos is running\|fill-pg is not running" > /dev/null
+./status.sh | grep "Nodeos is running\|fill-pg is running" > /dev/null
 
 if [ ${PIPESTATUS[1]} -eq 0  ]; then
     echo "Something is still running"

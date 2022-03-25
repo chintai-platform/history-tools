@@ -1,6 +1,6 @@
 #!/bin/bash
 
-./status.sh | grep "is running"
+./status.sh | grep "is running" > /dev/null
 
 if [ ${PIPESTATUS[1]} -eq 0  ]; then
     echo "Something is still running"

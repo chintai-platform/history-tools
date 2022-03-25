@@ -6,15 +6,13 @@ if [ ${PIPESTATUS[1]} -eq 0  ]; then
 else
     echo "Postgres is not running"
 fi
-echo ""
 
-ps ax | grep [n]odeos
+ps ax | grep [n]odeos > /dev/null
 if [ ${PIPESTATUS[1]} -eq 0  ]; then
     echo "Nodeos is running"
 else
     echo "Nodeos is not running"
 fi
-echo ""
 
 docker ps -a | grep fill-pg > /dev/null
 if [ ${PIPESTATUS[1]} -eq 0  ]; then
@@ -22,4 +20,4 @@ if [ ${PIPESTATUS[1]} -eq 0  ]; then
 else
     echo "fill-pg is not running"
 fi
-echo ""
+

@@ -2,4 +2,4 @@
 
 ./start_psql.sh
 ./start_nodeos.sh
-./start_fpg.sh
+./start_fpg_create.sh

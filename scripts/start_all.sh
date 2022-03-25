@@ -8,14 +8,21 @@ if [ ${PIPESTATUS[1]} -eq 0  ]; then
     exit 1
 fi
 
+CREATE=0
 docker ps | grep postgres > /dev/null
 if [ ${PIPESTATUS[1]} -ne 0  ]; then
     echo "Starting PSQL"
     ./start_psql.sh
+    CREATE=1
 fi
 
 echo "Starting Nodeos"
 ./start_nodeos.sh
 
 echo "Starting Fill-pg"
-./start_fpg.sh
+if [ $CREATE -eq 0 ]; then
+    ./start_fpg.sh
+else
+    ./start_fpg_create.sh
+fi
+

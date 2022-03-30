@@ -38,6 +38,7 @@ else
         --config-dir "${CONFIG_DIR}" \
         --data-dir "${DATA_DIR}" \
         --disable-replay-opts \
+        --delete-all-blocks \
         --genesis-json "${CONFIG_DIR}"/genesis.json \
         >> "${LOG_DIR}"/nodeos.log 2>&1 & \
         echo $! > "${DATA_DIR}/eosd.pid"

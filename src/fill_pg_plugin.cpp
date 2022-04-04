@@ -197,6 +197,11 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
       }
     }
 
+    // Add the ABI type here
+    //eosio::add_type(abi, (std::vector<eosio::ship_protocol::recurse_transaction_trace>*)nullptr);
+    //eosio::add_type(abi, (signed_block_header_modified*)nullptr);
+    eosio::add_type(abi, (std::vector<eosio::ship_protocol::signed_block_header_modified>*)nullptr);
+
     abi_types = std::move(abi.abi_types);
 
     if (config->create_schema) {
@@ -237,7 +242,8 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
     t.exec("insert into " + converter.schema_name + R"(.fill_status values (0, '', 0, '', 0))");
 
     auto exec = [&t](const auto& stmt) { t.exec(stmt); };
-    converter.create_table("block_info", get_type("signed_block_header"), "block_num bigint, block_id varchar(64)", {"block_num"}, exec);
+
+    converter.create_table("block_info", get_type("signed_block_header_modified"), "block_num bigint, block_id varchar(64)", {"block_num"}, exec);
 
     converter.create_table(
                            "transaction_trace", get_type("transaction_trace"), "block_num bigint, transaction_ordinal integer",

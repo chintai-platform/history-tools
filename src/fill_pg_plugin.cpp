@@ -200,7 +200,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
     // Add the ABI type here
     //eosio::add_type(abi, (std::vector<eosio::ship_protocol::recurse_transaction_trace>*)nullptr);
     //eosio::add_type(abi, (signed_block_header_modified*)nullptr);
-    eosio::add_type(abi, (std::vector<eosio::ship_protocol::signed_block_header_modified>*)nullptr);
+    //eosio::add_type(abi, (std::vector<eosio::ship_protocol::signed_block_header_modified>*)nullptr);
 
     abi_types = std::move(abi.abi_types);
 
@@ -243,7 +243,8 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
 
     auto exec = [&t](const auto& stmt) { t.exec(stmt); };
 
-    converter.create_table("block_info", get_type("signed_block_header_modified"), "block_num bigint, block_id varchar(64)", {"block_num"}, exec);
+    converter.create_table("block_info", get_type("signed_block_header"), "block_num bigint, block_id varchar(64)", {"block_num"}, exec);
+    t.exec("create table " + converter.schema_name + ".mytest " + R"((block_number BIGINT, block_id BIGINT CONSTRAINT pk PRIMARY KEY, timestamp TIMESTAMP, previous TEXT, transaction_mroot TEXT, action_mroot TEXT, producer_signature TEXT))");
 
     converter.create_table(
                            "transaction_trace", get_type("transaction_trace"), "block_num bigint, transaction_ordinal integer",
@@ -582,8 +583,6 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
   void receive_block(uint32_t block_num, const eosio::checksum256& block_id, const eosio::opaque<signed_block_header>& opq) {
     auto&                    abi_type = get_type("signed_block_header");
     std::vector<std::string> values{std::to_string(block_num), sql_str(block_id)};
-    std::cout << "Values are:" << std::endl;
-    for(int i = 0; i < values.size(); ++i) std::cout << values.at(i) << std::endl;
     auto                     bin = opq.get();
     converter.to_sql_values(bin, *abi_type.as_struct(), values);
     // Get rid of producer 3, confirmed 4, schedule_version 8, new_producers 9
@@ -591,9 +590,24 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
     values.erase(values.begin()+8);
     values.erase(values.begin()+4);
     values.erase(values.begin()+3);
-    std::cout << "New values are:" << std::endl;
-    for(int i = 0; i < values.size(); ++i) std::cout << values.at(i) << std::endl;
-    write_stream(block_num, "block_info", values);
+    //std::cout << "New values are:" << std::endl;
+    string values_as_string("");
+    values_as_string += values.at(0) + ", ";
+    values_as_string += values.at(1) + ", ";
+    values_as_string += values.at(2) + ", ";
+    values_as_string += values.at(3) + ", ";
+    values_as_string += values.at(4) + ", ";
+    values_as_string += values.at(5) + ", ";
+    values_as_string += values.at(6);
+
+    ilog("before work_t");
+    work_t t(*sql_connection);
+    ilog("before first insert");
+    t.exec("INSERT INTO chain.mytest VALUES (" + values_as_string + ")");
+    ilog("first insert");
+    t.exec("INSERT INTO chain.mytest VALUES (" + values_as_string + ")");
+    ilog("second insert");
+    //write_stream(block_num, "block_info", values);
   }
 
   void receive_deltas(uint32_t block_num, eosio::opaque<std::vector<eosio::ship_protocol::table_delta>> delta, bool bulk) {

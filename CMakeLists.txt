@@ -56,8 +56,8 @@ FetchContent_MakeAvailable(appbase)
 
 FetchContent_Declare(
   abieos
-  GIT_REPOSITORY https://github.com/chintai-platform/abieos.git
-  GIT_TAG history-tools
+  GIT_REPOSITORY https://github.com/EOSIO/abieos.git
+  GIT_TAG acde00fc7d4b743e599ced8886a013cb16cccbc2
 )
 FetchContent_MakeAvailable(abieos)
 

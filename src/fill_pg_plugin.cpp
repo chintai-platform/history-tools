@@ -244,7 +244,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
     auto exec = [&t](const auto& stmt) { t.exec(stmt); };
 
     converter.create_table("block_info", get_type("signed_block_header"), "block_num bigint, block_id varchar(64)", {"block_num"}, exec);
-    t.exec("create table " + converter.schema_name + ".mytest " + R"((block_number BIGINT CONSTRAINT pk PRIMARY KEY, block_id varchar(64), timestamp TIMESTAMP, previous varchar(64), transaction_mroot varchar(64), action_mroot varchar(64), producer_signature varchar))");
+    t.exec("create table " + converter.schema_name + ".chintai_block_info " + R"((block_number BIGINT CONSTRAINT pk PRIMARY KEY, block_id varchar(64), timestamp TIMESTAMP, previous varchar(64), transaction_mroot varchar(64), action_mroot varchar(64), producer_signature varchar))");
 
     converter.create_table(
                            "transaction_trace", get_type("transaction_trace"), "block_num bigint, transaction_ordinal integer",
@@ -591,24 +591,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
     values.erase(values.begin()+8);
     values.erase(values.begin()+4);
     values.erase(values.begin()+3);
-    //std::cout << "New values are:" << std::endl;
-    //string values_as_string("");
-    //values_as_string += values.at(0) + ", ";
-    //values_as_string += values.at(1) + ", ";
-    //values_as_string += values.at(2) + ", ";
-    //values_as_string += values.at(3) + ", ";
-    //values_as_string += values.at(4) + ", ";
-    //values_as_string += values.at(5) + ", ";
-    //values_as_string += values.at(6);
-
-    //ilog("before work_t");
-    //work_t t(*sql_connection);
-    //ilog("before first insert");
-    //t.exec("INSERT INTO chain.mytest VALUES (" + values_as_string + ")");
-    //ilog("first insert");
-    //t.exec("INSERT INTO chain.mytest VALUES (" + values_as_string + ")");
-    //ilog("second insert");
-    write_stream(block_num, "mytest", values);
+    write_stream(block_num, "chintai_block_info", values);
   }
 
   void receive_deltas(uint32_t block_num, eosio::opaque<std::vector<eosio::ship_protocol::table_delta>> delta, bool bulk) {

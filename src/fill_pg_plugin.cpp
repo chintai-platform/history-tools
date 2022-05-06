@@ -244,11 +244,12 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
     auto exec = [&t](const auto& stmt) { t.exec(stmt); };
 
     converter.create_table("block_info", get_type("signed_block_header"), "block_num bigint, block_id varchar(64)", {"block_num"}, exec);
-    t.exec("create table " + converter.schema_name + ".chintai_block_info " + R"((block_number BIGINT CONSTRAINT pk PRIMARY KEY, block_id varchar(64), timestamp TIMESTAMP, previous varchar(64), transaction_mroot varchar(64), action_mroot varchar(64), producer_signature varchar))");
+    t.exec("create table " + converter.schema_name + ".chintai_block_info " + R"((block_number BIGINT CONSTRAINT block_info_pk PRIMARY KEY, block_id varchar(64), timestamp TIMESTAMP, previous varchar(64), transaction_mroot varchar(64), action_mroot varchar(64), producer_signature varchar))");
 
     converter.create_table(
                            "transaction_trace", get_type("transaction_trace"), "block_num bigint, transaction_ordinal integer",
                            {"block_num", "transaction_ordinal"}, exec);
+    t.exec("create table " + converter.schema_name + ".chintai_transaction_trace " + R"((block_number BIGINT CONSTRAINT transaction_trace_pk PRIMARY KEY))");
 
     for (auto& table : connection->abi.tables) {
       std::vector<std::string> keys = {"block_num", "present"};
@@ -658,7 +659,25 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
     auto                     transaction_ordinal = ++num_ordinals;
     std::vector<std::string> values{std::to_string(block_num), std::to_string(transaction_ordinal)};
     converter.to_sql_values(trace_bin, "transaction_trace", *get_type("transaction_trace").as_variant(), values);
-    write_stream(block_num, "transaction_trace", values);
+    // delete unwanted values here. 
+        std::cout << "The values are:" << std::endl;
+            for(int i = 0; i < values.size(); ++i) std::cout << values.at(i) << std::endl;
+
+    values.erase(values.begin()+14);
+    values.erase(values.begin()+13);
+    values.erase(values.begin()+12);
+    values.erase(values.begin()+11);
+    values.erase(values.begin()+10);
+    values.erase(values.begin()+9);
+    values.erase(values.begin()+8);
+    values.erase(values.begin()+7);
+    values.erase(values.begin()+6);
+    values.erase(values.begin()+5);
+    values.erase(values.begin()+4);
+    values.erase(values.begin()+3);
+    values.erase(values.begin()+2);
+    values.erase(values.begin()+1);
+    write_stream(block_num, "chintai_transaction_trace", values);
   } // write_transaction_trace
 
   void trim() {

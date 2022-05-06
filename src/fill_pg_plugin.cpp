@@ -249,7 +249,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
     converter.create_table(
                            "transaction_trace", get_type("transaction_trace"), "block_num bigint, transaction_ordinal integer",
                            {"block_num", "transaction_ordinal"}, exec);
-    t.exec("create table " + converter.schema_name + ".chintai_transaction_trace " + R"((block_number BIGINT CONSTRAINT transaction_trace_pk PRIMARY KEY))");
+    t.exec("create table " + converter.schema_name + ".chintai_transaction_trace " + R"((block_number BIGINT CONSTRAINT transaction_trace_pk PRIMARY KEY, transaction_ordinal INT, id varchar(64), status varchar))");
 
     for (auto& table : connection->abi.tables) {
       std::vector<std::string> keys = {"block_num", "present"};
@@ -674,9 +674,6 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
     values.erase(values.begin()+6);
     values.erase(values.begin()+5);
     values.erase(values.begin()+4);
-    values.erase(values.begin()+3);
-    values.erase(values.begin()+2);
-    values.erase(values.begin()+1);
     write_stream(block_num, "chintai_transaction_trace", values);
   } // write_transaction_trace
 

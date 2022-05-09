@@ -690,8 +690,8 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
       memcpy(trx_num, &transaction_number, 32);
       std::vector<std::string> values{std::string(trx_num)};
       eosio::ship_protocol::action_trace_v1 trace = std::get<1>(action_traces.at(i));
-      values.push_back(std::to_string(trace.action_ordinal));
-      values.push_back(std::to_string(trace.creator_action_ordinal));
+      values.push_back(std::to_string(uint32_t(trace.action_ordinal)));
+      values.push_back(std::to_string(uint32_t(trace.creator_action_ordinal)));
       values.push_back(trace.receiver.to_string());
       values.push_back(trace.act.account.to_string());
       values.push_back(trace.act.name.to_string());

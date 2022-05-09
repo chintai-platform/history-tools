@@ -647,6 +647,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
   void write_transaction_trace(
                                uint32_t block_num, uint32_t& num_ordinals, const eosio::ship_protocol::transaction_trace& trace, eosio::input_stream trace_bin) {
 
+    std::cout << "CPU usage: " << std::get<0>(trace).cpu_usage_us << std::endl;
     auto failed = std::visit(
                              [](auto& ttrace) { return !ttrace.failed_dtrx_trace.empty() ? &ttrace.failed_dtrx_trace[0].recurse : nullptr; }, trace);
     if (failed != nullptr) {
@@ -655,6 +656,8 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
       std::vector<char> data = eosio::convert_to_bin(*failed);
       write_transaction_trace(block_num, num_ordinals, *failed, eosio::input_stream{data});
     }
+
+    write_action_traces(block_num, num_ordinals, std::get<0>(trace).action_traces, trace_bin);
 
     auto                     transaction_ordinal = ++num_ordinals;
     std::vector<std::string> values{std::to_string(block_num), std::to_string(transaction_ordinal)};
@@ -676,6 +679,23 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
     values.erase(values.begin()+4);
     write_stream(block_num, "chintai_transaction_trace", values);
   } // write_transaction_trace
+
+  void write_action_traces(uint32_t const block_num, 
+                           uint32_t const num_ordinals,
+                           std::vector<action_trace> const &action_traces,
+                           eosio::input_stream const &trace_bin)
+  {
+    for (int i=0; i < action_traces.size(); ++i)
+    {
+      action_trace trace = action_traces.at(i);
+      eosio::varuint32 action_ordinal = std::get<1>(trace).action_ordinal;
+
+      auto transaction_ordinal = ++num_ordinals;
+      std::vector<std::string> values{std::to_string(block_num), std::to_string(transaction_ordinal)};
+      converter.to_sql_values(trace_bin, "action_trace", *get_type("action_trace").as_variant(), values);
+      //write_stream(block_num, "chintai_action_trace", values)
+    }
+  } //write_action_traces
 
   void trim() {
     if (!config->enable_trim)

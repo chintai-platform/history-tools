@@ -657,7 +657,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
       write_transaction_trace(block_num, num_ordinals, *failed, eosio::input_stream{data});
     }
 
-    write_action_traces(block_num, num_ordinals, std::get<0>(trace).action_traces, trace_bin);
+    write_action_traces(std::get<0>(trace).id, std::get<0>(trace).action_traces);
 
     auto                     transaction_ordinal = ++num_ordinals;
     std::vector<std::string> values{std::to_string(block_num), std::to_string(transaction_ordinal)};
@@ -680,20 +680,28 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
     write_stream(block_num, "chintai_transaction_trace", values);
   } // write_transaction_trace
 
-  void write_action_traces(uint32_t const block_num, 
-                           uint32_t const num_ordinals,
-                           std::vector<action_trace> const &action_traces,
-                           eosio::input_stream const &trace_bin)
+  void write_action_traces(eosio::checksum256 const transaction_number, 
+                           std::vector<eosio::ship_protocol::action_trace> const &action_traces
+                           )
   {
     for (int i=0; i < action_traces.size(); ++i)
     {
-      action_trace trace = action_traces.at(i);
-      eosio::varuint32 action_ordinal = std::get<1>(trace).action_ordinal;
+      char * trx_num;
+      memcpy(trx_num, &transaction_number, 32);
+      std::vector<std::string> values{std::string(trx_num)};
+      eosio::ship_protocol::action_trace_v1 trace = std::get<1>(action_traces.at(i));
+      values.push_back(std::to_string(trace.action_ordinal));
+      values.push_back(std::to_string(trace.creator_action_ordinal));
+      values.push_back(trace.receiver.to_string());
+      values.push_back(trace.act.account.to_string());
+      values.push_back(trace.act.name.to_string());
+//      values.push_back(trace.act.authorization.to_string());
+//      char * data = trace.act.data.value;
+//      values.push_back(std::to_string(data));
+      values.push_back(std::to_string(trace.context_free));
+      values.push_back(trace.console);
 
-      auto transaction_ordinal = ++num_ordinals;
-      std::vector<std::string> values{std::to_string(block_num), std::to_string(transaction_ordinal)};
-      converter.to_sql_values(trace_bin, "action_trace", *get_type("action_trace").as_variant(), values);
-      //write_stream(block_num, "chintai_action_trace", values)
+      write_stream(transaction_number, "chintai_action_trace", values);
     }
   } //write_action_traces
 

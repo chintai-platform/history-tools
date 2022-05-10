@@ -250,7 +250,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
                            "transaction_trace", get_type("transaction_trace"), "block_num bigint, transaction_ordinal integer",
                            {"block_num", "transaction_ordinal"}, exec);
     t.exec("create table " + converter.schema_name + ".chintai_transaction_trace " + R"((block_number BIGINT CONSTRAINT transaction_trace_pk PRIMARY KEY, transaction_ordinal INT, id varchar(64), status varchar))");
-    t.exec("create table " + converter.schema_name + ".chintai_action_trace " + R"((transaction_number BIGINT CONSTRAINT action_trace_pk PRIMARY KEY, action_ordinal INT, creator_action_ordinal INT, receiver varchar(64), action_account carchar(64), action_name varchar(64), action_authorization varchar(64), action_data carchar(64), context_free BOOL, console varchar(64)))");
+    t.exec("create table " + converter.schema_name + ".chintai_action_trace " + R"((transaction_number BIGINT CONSTRAINT action_trace_pk PRIMARY KEY, action_ordinal INT, creator_action_ordinal INT, receiver varchar(64), action_account varchar(64), action_name varchar(64), action_authorization varchar(64), action_data varchar(64), context_free BOOL, console varchar(64)))");
 
     for (auto& table : connection->abi.tables) {
       std::vector<std::string> keys = {"block_num", "present"};

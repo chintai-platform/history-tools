@@ -15,7 +15,7 @@ if [ -f "${DATA_DIR}/eosd.pid" ]; then
     kill $pid
     rm -r "${DATA_DIR}/eosd.pid"
 
-    echo -ne "Stoping Node"
+    echo -ne "Stopping Node"
 
     while true; do
         [ ! -d "/proc/$pid/fd" ] && break

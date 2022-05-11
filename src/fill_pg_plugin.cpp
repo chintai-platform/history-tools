@@ -250,7 +250,8 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
                            "transaction_trace", get_type("transaction_trace"), "block_num bigint, transaction_ordinal integer",
                            {"block_num", "transaction_ordinal"}, exec);
     t.exec("create table " + converter.schema_name + ".chintai_transaction_trace " + R"((block_number BIGINT CONSTRAINT transaction_trace_pk PRIMARY KEY, transaction_ordinal INT, id varchar(64), status varchar))");
-    t.exec("create table " + converter.schema_name + ".chintai_action_trace " + R"((transaction_number BIGINT CONSTRAINT action_trace_pk PRIMARY KEY, action_ordinal INT, creator_action_ordinal INT, receiver varchar(64), action_account varchar(64), action_name varchar(64), action_authorization varchar(64), action_data varchar(64), context_free BOOL, console varchar(64)))");
+    //t.exec("create table " + converter.schema_name + ".chintai_action_trace " + R"((transaction_id varchar(64), transaction_number varchar(64), action_ordinal INT, creator_action_ordinal INT, receiver varchar(64), action_account varchar(64), action_name varchar(64), context_free BOOL, console varchar(64)))");
+    t.exec("create table " + converter.schema_name + ".chintai_action_trace " + R"((action_ordinal INT, creator_action_ordinal INT, receiver varchar(64), action_account varchar(64), action_name varchar(64), context_free BOOL, console varchar(64)))");
 
     for (auto& table : connection->abi.tables) {
       std::vector<std::string> keys = {"block_num", "present"};
@@ -648,7 +649,6 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
   void write_transaction_trace(
                                uint32_t block_num, uint32_t& num_ordinals, const eosio::ship_protocol::transaction_trace& trace, eosio::input_stream trace_bin) {
 
-    std::cout << "CPU usage: " << std::get<0>(trace).cpu_usage_us << std::endl;
     auto failed = std::visit(
                              [](auto& ttrace) { return !ttrace.failed_dtrx_trace.empty() ? &ttrace.failed_dtrx_trace[0].recurse : nullptr; }, trace);
     if (failed != nullptr) {
@@ -658,7 +658,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
       write_transaction_trace(block_num, num_ordinals, *failed, eosio::input_stream{data});
     }
 
-    write_action_traces(std::get<0>(trace).id, std::get<0>(trace).action_traces, trace_bin);
+    write_action_traces(block_num, std::get<0>(trace).id, std::get<0>(trace).action_traces);
 
     auto                     transaction_ordinal = ++num_ordinals;
     std::vector<std::string> values{std::to_string(block_num), std::to_string(transaction_ordinal)};
@@ -681,30 +681,29 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
     write_stream(block_num, "chintai_transaction_trace", values);
   } // write_transaction_trace
 
-  void write_action_traces(eosio::checksum256 const transaction_number, 
-                           std::vector<eosio::ship_protocol::action_trace> const &action_traces,
-                           eosio::input_stream trace_bin)
+  void write_action_traces(uint32_t const block_number,
+                           eosio::checksum256 const transaction_id, 
+                           std::vector<eosio::ship_protocol::action_trace> const &action_traces)
   {
     for (int i=0; i < action_traces.size(); ++i)
     {
-      char * trx_num;
-      memcpy(trx_num, &transaction_number, 32);
-    //  std::vector<std::string> values{std::string(trx_num)};
-    //  eosio::ship_protocol::action_trace_v1 trace = std::get<1>(action_traces.at(i));
-    //  values.push_back(std::to_string(uint32_t(trace.action_ordinal)));
-    //  values.push_back(std::to_string(uint32_t(trace.creator_action_ordinal)));
-    //  values.push_back(trace.receiver.to_string());
-    //  values.push_back(trace.act.account.to_string());
-    //  values.push_back(trace.act.name.to_string());
-//  //    values.push_back(trace.act.authorization.to_string());
-//  //    char * data = trace.act.data.value;
-//  //    values.push_back(std::to_string(data));
-    //  values.push_back(std::to_string(trace.context_free));
-    //  values.push_back(trace.console);
+      char trx_num[32];
+      memcpy(trx_num, &transaction_id, 32);
+      std::vector<std::string> values{};
+      //values.push_back(std::string(trx_num));
+      eosio::ship_protocol::action_trace_v1 trace = std::get<1>(action_traces.at(i));
+      values.push_back(std::to_string(uint32_t(trace.action_ordinal)));
+      values.push_back(std::to_string(uint32_t(trace.creator_action_ordinal)));
+      values.push_back(trace.receiver.to_string());
+      values.push_back(trace.act.account.to_string());
+      values.push_back(trace.act.name.to_string());
+//      values.push_back(trace.act.authorization.to_string());
+//      char * data = trace.act.data.value;
+//      values.push_back(std::to_string(data));
+      values.push_back(std::to_string(trace.context_free));
+      values.push_back(trace.console);
 
-    //  converter.to_sql_values(trace_bin, "action_trace", *get_type("action_trace").as_variant(), values);
-
-    //  write_stream(static_cast<uint32_t>(std::__cxx11::stoi(trx_num)), "chintai_action_trace", values);
+      write_stream(block_number, "chintai_action_trace", values);
     }
   } //write_action_traces
 

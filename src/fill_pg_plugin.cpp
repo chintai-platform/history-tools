@@ -251,7 +251,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
                            {"block_num", "transaction_ordinal"}, exec);
     t.exec("create table " + converter.schema_name + ".chintai_transaction_trace " + R"((block_number BIGINT CONSTRAINT transaction_trace_pk PRIMARY KEY, transaction_ordinal INT, id varchar(64), status varchar))");
     //t.exec("create table " + converter.schema_name + ".chintai_action_trace " + R"((transaction_id varchar(64), transaction_number varchar(64), action_ordinal INT, creator_action_ordinal INT, receiver varchar(64), action_account varchar(64), action_name varchar(64), context_free BOOL, console varchar(64)))");
-    t.exec("create table " + converter.schema_name + ".chintai_action_trace " + R"((action_ordinal INT, creator_action_ordinal INT, receiver varchar(64), action_account varchar(64), action_name varchar(64), context_free BOOL, console varchar(64)))");
+    t.exec("create table " + converter.schema_name + ".chintai_action_trace " + R"((action_ordinal INT, creator_action_ordinal INT, receiver varchar(12), action_account varchar(12), action_name varchar(12), action_data TEXT, context_free BOOL, console TEXT))");
 
     for (auto& table : connection->abi.tables) {
       std::vector<std::string> keys = {"block_num", "present"};
@@ -663,10 +663,8 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
     auto                     transaction_ordinal = ++num_ordinals;
     std::vector<std::string> values{std::to_string(block_num), std::to_string(transaction_ordinal)};
     converter.to_sql_values(trace_bin, "transaction_trace", *get_type("transaction_trace").as_variant(), values);
-    // delete unwanted values here. 
-        std::cout << "The values are:" << std::endl;
-            for(int i = 0; i < values.size(); ++i) std::cout << values.at(i) << std::endl;
 
+    // delete unwanted values here. 
     values.erase(values.begin()+14);
     values.erase(values.begin()+13);
     values.erase(values.begin()+12);
@@ -698,14 +696,34 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
       values.push_back(trace.act.account.to_string());
       values.push_back(trace.act.name.to_string());
 //      values.push_back(trace.act.authorization.to_string());
-//      char * data = trace.act.data.value;
-//      values.push_back(std::to_string(data));
+      size_t remaining_bytes = trace.act.data.remaining();
+      std::cout << "remaining bytes: " << remaining_bytes << std::endl;
+      unsigned char * data = new unsigned char[remaining_bytes];
+      trace.act.data.read(data, remaining_bytes);
+      std::cout << "data: " << data << std::endl;
+      std::string hex_data = hexStr(data, remaining_bytes);
+      std::cout << "data_hex: " << hex_data << std::endl;
+      values.push_back(hex_data);
+      delete[] data;
       values.push_back(std::to_string(trace.context_free));
       values.push_back(trace.console);
 
       write_stream(block_number, "chintai_action_trace", values);
     }
   } //write_action_traces
+
+  static constexpr char hexmap[] = {'0', '1', '2', '3', '4', '5', '6', '7',
+                               '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'};
+
+  std::string hexStr(unsigned char *data, size_t len)
+  {
+      std::string s(len * 2, ' ');
+        for (int i = 0; i < len; ++i) {
+              s[2 * i]     = hexmap[(data[i] & 0xF0) >> 4];
+                  s[2 * i + 1] = hexmap[data[i] & 0x0F];
+                    }
+          return s;
+  }
 
   void trim() {
     if (!config->enable_trim)

@@ -720,7 +720,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
     {
       permission_level current = authorizations.at(i);
       authorization_string.append(current.actor.to_string());
-      authorization_string.append(":");
+      authorization_string.append("@");
       authorization_string.append(current.permission.to_string());
       if (i + 1 <= authorizations.size())
       {

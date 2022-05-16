@@ -250,8 +250,8 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
                            "transaction_trace", get_type("transaction_trace"), "block_num bigint, transaction_ordinal integer",
                            {"block_num", "transaction_ordinal"}, exec);
     t.exec("create table " + converter.schema_name + ".chintai_transaction_trace " + R"((block_number BIGINT CONSTRAINT transaction_trace_pk PRIMARY KEY, transaction_ordinal INT, id varchar(64), status varchar))");
-    //t.exec("create table " + converter.schema_name + ".chintai_action_trace " + R"((transaction_id varchar(64), transaction_number varchar(64), action_ordinal INT, creator_action_ordinal INT, receiver varchar(64), action_account varchar(64), action_name varchar(64), context_free BOOL, console varchar(64)))");
-    t.exec("create table " + converter.schema_name + ".chintai_action_trace " + R"((action_ordinal INT, creator_action_ordinal INT, receiver varchar(12), action_account varchar(12), action_name varchar(12), action_data TEXT, context_free BOOL, console TEXT))");
+    //t.exec("create table " + converter.schema_name + ".chintai_action_trace " + R"((action_ordinal INT, creator_action_ordinal INT, receiver varchar(12), action_account varchar(12), action_name varchar(12), action_data TEXT, context_free BOOL, console TEXT))");
+    t.exec("create table " + converter.schema_name + ".chintai_action_trace " + R"((action_ordinal INT, creator_action_ordinal INT, receiver varchar(12), action_account varchar(12), action_name varchar(12), action_permission TEXT, action_data TEXT, context_free BOOL, console TEXT))");
 
     for (auto& table : connection->abi.tables) {
       std::vector<std::string> keys = {"block_num", "present"};
@@ -695,7 +695,8 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
       values.push_back(trace.receiver.to_string());
       values.push_back(trace.act.account.to_string());
       values.push_back(trace.act.name.to_string());
-//      values.push_back(trace.act.authorization.to_string());
+      std::string authorization_string = get_authorization_string(trace.act.authorization);
+      values.push_back(authorization_string);
       size_t remaining_bytes = trace.act.data.remaining();
       std::cout << "remaining bytes: " << remaining_bytes << std::endl;
       unsigned char * data = new unsigned char[remaining_bytes];
@@ -711,6 +712,24 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
       write_stream(block_number, "chintai_action_trace", values);
     }
   } //write_action_traces
+
+  std::string get_authorization_string(std::vector<permission_level> const &authorizations)
+  {
+    std::string authorization_string = "";
+    for (int i = 0; i > authorizations.size(); ++i)
+    {
+      permission_level current = authorizations.at(i);
+      authorization_string.append(current.actor.to_string());
+      authorization_string.append(":");
+      authorization_string.append(current.permission.to_string());
+      if (i + 1 <= authorizations.size())
+      {
+        authorization_string.append(", ");
+      }
+    }
+
+    return authorization_string;
+  }
 
   static constexpr char hexmap[] = {'0', '1', '2', '3', '4', '5', '6', '7',
                                '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'};

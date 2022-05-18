@@ -244,14 +244,14 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
     auto exec = [&t](const auto& stmt) { t.exec(stmt); };
 
     converter.create_table("block_info", get_type("signed_block_header"), "block_num bigint, block_id varchar(64)", {"block_num"}, exec);
-    t.exec("create table " + converter.schema_name + ".chintai_block_info " + R"((block_number BIGINT CONSTRAINT block_info_pk PRIMARY KEY, block_id varchar(64), timestamp TIMESTAMP, previous varchar(64), transaction_mroot varchar(64), action_mroot varchar(64), producer_signature varchar))");
+    t.exec("create table " + converter.schema_name + ".blocks " + R"((block_number BIGINT CONSTRAINT block_info_pk PRIMARY KEY, block_id varchar(64), timestamp TIMESTAMP, previous varchar(64), transaction_mroot varchar(64), action_mroot varchar(64), producer_signature varchar))");
 
     converter.create_table(
                            "transaction_trace", get_type("transaction_trace"), "block_num bigint, transaction_ordinal integer",
                            {"block_num", "transaction_ordinal"}, exec);
-    t.exec("create table " + converter.schema_name + ".chintai_transaction_trace " + R"((block_number BIGINT CONSTRAINT transaction_trace_pk PRIMARY KEY, transaction_ordinal INT, id varchar(64), status varchar))");
-    //t.exec("create table " + converter.schema_name + ".chintai_action_trace " + R"((action_ordinal INT, creator_action_ordinal INT, receiver varchar(12), action_account varchar(12), action_name varchar(12), action_data TEXT, context_free BOOL, console TEXT))");
-    t.exec("create table " + converter.schema_name + ".chintai_action_trace " + R"((action_ordinal INT, creator_action_ordinal INT, receiver varchar(12), action_account varchar(12), action_name varchar(12), action_permission TEXT, action_data TEXT, context_free BOOL, console TEXT))");
+    t.exec("create table " + converter.schema_name + ".transactions " + R"((block_number BIGINT, transaction_ordinal INT, id varchar(64), status varchar, transaction_number SERIAL CONSTRAINT transaction_trace_pk PRIMARY KEY))");
+    //t.exec("create table " + converter.schema_name + ".chintai_action_trace " + R"((action_ordinal INT, creator_action_ordinal INT, receiver varchar(12), action_account varchar(12), action_name varchar(12), action_permission TEXT, action_data TEXT, context_free BOOL, console TEXT))");
+    t.exec("create table " + converter.schema_name + ".actions " + R"((transaction_id TEXT, action_ordinal INT, creator_action_ordinal INT, receiver varchar(12), action_account varchar(12), action_name varchar(12), action_permission TEXT, action_data TEXT, context_free BOOL, console TEXT, action_number SERIAL CONSTRAINT action_trace_pk PRIMARY KEY))");
 
     for (auto& table : connection->abi.tables) {
       std::vector<std::string> keys = {"block_num", "present"};
@@ -594,7 +594,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
     values.erase(values.begin()+8);
     values.erase(values.begin()+4);
     values.erase(values.begin()+3);
-    write_stream(block_num, "chintai_block_info", values);
+    write_stream(block_num, "blocks", values);
   }
 
   void receive_deltas(uint32_t block_num, eosio::opaque<std::vector<eosio::ship_protocol::table_delta>> delta, bool bulk) {
@@ -648,6 +648,23 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
 
   void write_transaction_trace(
                                uint32_t block_num, uint32_t& num_ordinals, const eosio::ship_protocol::transaction_trace& trace, eosio::input_stream trace_bin) {
+    work_t t(*sql_connection);
+    std::string transaction_number = "0";
+    auto query = t.exec("select transaction_number from chain.transactions order by transaction_number desc limit 1;");
+    if (!query.empty())
+    {
+      auto row = query.at(0);
+      if (!row.empty())
+      {
+        auto previous_transaction_number = row.at(0);
+        std::cout << previous_transaction_number.c_str() << std::endl;
+        int previous_transaction_number_int = std::__cxx11::stoi(previous_transaction_number.c_str());
+        ++previous_transaction_number_int;
+        std::string previous_transaction_number_string = std::to_string(previous_transaction_number_int);
+        transaction_number = previous_transaction_number_string;
+      }
+    }
+    //std::cout << query << std::endl;
 
     auto failed = std::visit(
                              [](auto& ttrace) { return !ttrace.failed_dtrx_trace.empty() ? &ttrace.failed_dtrx_trace[0].recurse : nullptr; }, trace);
@@ -676,8 +693,14 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
     values.erase(values.begin()+6);
     values.erase(values.begin()+5);
     values.erase(values.begin()+4);
-    write_stream(block_num, "chintai_transaction_trace", values);
+    values.push_back(transaction_number);
+    write_stream(block_num, "transactions", values);
   } // write_transaction_trace
+
+  struct chintai_uint256_t
+  {
+    uint64_t bits[4];
+  };
 
   void write_action_traces(uint32_t const block_number,
                            eosio::checksum256 const transaction_id, 
@@ -685,10 +708,31 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
   {
     for (int i=0; i < action_traces.size(); ++i)
     {
-      char trx_num[32];
-      memcpy(trx_num, &transaction_id, 32);
+    work_t t(*sql_connection);
+    std::string action_number = "0";
+    auto query = t.exec("select action_number from chain.actions order by action_number desc limit 1;");
+    if (!query.empty())
+    {
+      auto row = query.at(0);
+      if (!row.empty())
+      {
+        auto previous_action_number = row.at(0);
+        std::cout << previous_action_number.c_str() << std::endl;
+        int previous_action_number_int = std::__cxx11::stoi(previous_action_number.c_str());
+        ++previous_action_number_int;
+        std::string previous_action_number_string = std::to_string(previous_action_number_int);
+        action_number = previous_action_number_string;
+      }
+    }
+      chintai_uint256_t xyz;
+      memcpy(&xyz, &transaction_id, 32);
+      char hexstring[65];  // needs to be at least 64 hex digits + 1 for the null terminator
+      sprintf(hexstring, "%016llx%016llx%016llx%016llx", xyz.bits[3], xyz.bits[2], xyz.bits[1], xyz.bits[0]);
+      char trx_id[32];
+      memcpy(trx_id, &transaction_id, 32);
       std::vector<std::string> values{};
-      //values.push_back(std::string(trx_num));
+      std::cout << "trx_id: " << hexstring << std::endl;
+      values.push_back(std::string(hexstring));
       eosio::ship_protocol::action_trace_v1 trace = std::get<1>(action_traces.at(i));
       values.push_back(std::to_string(uint32_t(trace.action_ordinal)));
       values.push_back(std::to_string(uint32_t(trace.creator_action_ordinal)));
@@ -708,8 +752,9 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
       delete[] data;
       values.push_back(std::to_string(trace.context_free));
       values.push_back(trace.console);
+      values.push_back(action_number);
 
-      write_stream(block_number, "chintai_action_trace", values);
+      write_stream(block_number, "actions", values);
     }
   } //write_action_traces
 

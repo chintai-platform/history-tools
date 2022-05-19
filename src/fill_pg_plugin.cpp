@@ -87,6 +87,13 @@ struct table_stream {
   table_stream(const std::string& name)
     : t(c)
       , writer(t, name) {}
+  table_stream(const std::string& name, const std::vector<std::string>& columns)
+    : t(c),
+    writer(t, columns.begin(), columns.end(), name) {}
+// table_stream(const std::string& name, const std::vector<std::string>& columns) {
+//     t = c;
+//     writer = tablewriter(t, columns.begin(), columns.end(), name)
+//   }
 };
 
 template <typename T>
@@ -249,9 +256,9 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
     converter.create_table(
                            "transaction_trace", get_type("transaction_trace"), "block_num bigint, transaction_ordinal integer",
                            {"block_num", "transaction_ordinal"}, exec);
-    t.exec("create table " + converter.schema_name + ".transactions " + R"((block_number BIGINT, transaction_ordinal INT, id varchar(64), status varchar, transaction_number SERIAL CONSTRAINT transaction_trace_pk PRIMARY KEY))");
+    t.exec("create table " + converter.schema_name + ".transactions " + R"((block_number BIGINT, transaction_ordinal INT, id varchar(64), status varchar, transaction_number BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY))");
     //t.exec("create table " + converter.schema_name + ".chintai_action_trace " + R"((action_ordinal INT, creator_action_ordinal INT, receiver varchar(12), action_account varchar(12), action_name varchar(12), action_permission TEXT, action_data TEXT, context_free BOOL, console TEXT))");
-    t.exec("create table " + converter.schema_name + ".actions " + R"((transaction_id TEXT, action_ordinal INT, creator_action_ordinal INT, receiver varchar(12), action_account varchar(12), action_name varchar(12), action_permission TEXT, action_data TEXT, context_free BOOL, console TEXT, action_number SERIAL CONSTRAINT action_trace_pk PRIMARY KEY))");
+    t.exec("create table " + converter.schema_name + ".actions " + R"((transaction_id TEXT, action_ordinal INT, creator_action_ordinal INT, receiver varchar(12), action_account varchar(12), action_name varchar(12), action_permission TEXT, action_data TEXT, context_free BOOL, console TEXT, action_number BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY))");
 
     for (auto& table : connection->abi.tables) {
       std::vector<std::string> keys = {"block_num", "present"};
@@ -557,6 +564,17 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
     auto& ts = table_streams[name];
     if (!ts)
       ts = std::make_unique<table_stream>(converter.schema_name + "." + quote_name(name));
+    ts->writer.write_raw_line(boost::algorithm::join(values, "\t"));
+  }
+
+  void write_stream_transactions(uint32_t block_num, const std::string& name, const std::vector<std::string>& values) {
+    if (!first_bulk)
+      first_bulk = block_num;
+    auto& ts = table_streams[name];
+    if (!ts) {
+      std::vector<std::string> columns = {"block_number", "transaction_ordinal", "id", "status"};
+      ts = std::make_unique<table_stream>(converter.schema_name + "." + quote_name(name), columns);
+    }
     ts->writer.write_raw_line(boost::algorithm::join(values, "\t"));
   }
 

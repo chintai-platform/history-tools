@@ -74,6 +74,13 @@ struct tablewriter {
   pqxx::tablewriter wr;
   tablewriter(work_t& t, const std::string& name)
     : wr(t.w, name) {}
+  template<typename ITER>
+    tablewriter(
+                work_t &t,
+                const std::string &name,
+                ITER begincolumns,
+                ITER endcolumns) :
+      wr(t.w, name, begincolumns, endcolumns) {}
 
   void write_raw_line(std::string v) { wr.write_raw_line(v); }
   void complete() { wr.complete(); }
@@ -89,11 +96,7 @@ struct table_stream {
       , writer(t, name) {}
   table_stream(const std::string& name, const std::vector<std::string>& columns)
     : t(c),
-    writer(t, columns.begin(), columns.end(), name) {}
-// table_stream(const std::string& name, const std::vector<std::string>& columns) {
-//     t = c;
-//     writer = tablewriter(t, columns.begin(), columns.end(), name)
-//   }
+    writer(t, name, columns.begin(), columns.end()) {}
 };
 
 template <typename T>
@@ -257,7 +260,6 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
                            "transaction_trace", get_type("transaction_trace"), "block_num bigint, transaction_ordinal integer",
                            {"block_num", "transaction_ordinal"}, exec);
     t.exec("create table " + converter.schema_name + ".transactions " + R"((block_number BIGINT, transaction_ordinal INT, id varchar(64), status varchar, transaction_number BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY))");
-    //t.exec("create table " + converter.schema_name + ".chintai_action_trace " + R"((action_ordinal INT, creator_action_ordinal INT, receiver varchar(12), action_account varchar(12), action_name varchar(12), action_permission TEXT, action_data TEXT, context_free BOOL, console TEXT))");
     t.exec("create table " + converter.schema_name + ".actions " + R"((transaction_id TEXT, action_ordinal INT, creator_action_ordinal INT, receiver varchar(12), action_account varchar(12), action_name varchar(12), action_permission TEXT, action_data TEXT, context_free BOOL, console TEXT, action_number BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY))");
 
     for (auto& table : connection->abi.tables) {
@@ -572,7 +574,16 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
       first_bulk = block_num;
     auto& ts = table_streams[name];
     if (!ts) {
-      std::vector<std::string> columns = {"block_number", "transaction_ordinal", "id", "status"};
+      std::vector<std::string> columns;
+      if (name == "transactions") 
+      {
+        columns = {"block_number", "transaction_ordinal", "id", "status"};
+      }
+      else if (name == "actions")
+      {
+        columns = {"transaction_id", "action_ordinal", "creator_action_ordinal", "receiver", "action_account", "action_name", "action_permission", "action_data", "context_free", "console"};
+      }
+
       ts = std::make_unique<table_stream>(converter.schema_name + "." + quote_name(name), columns);
     }
     ts->writer.write_raw_line(boost::algorithm::join(values, "\t"));
@@ -666,24 +677,6 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
 
   void write_transaction_trace(
                                uint32_t block_num, uint32_t& num_ordinals, const eosio::ship_protocol::transaction_trace& trace, eosio::input_stream trace_bin) {
-    work_t t(*sql_connection);
-    std::string transaction_number = "0";
-    auto query = t.exec("select transaction_number from chain.transactions order by transaction_number desc limit 1;");
-    if (!query.empty())
-    {
-      auto row = query.at(0);
-      if (!row.empty())
-      {
-        auto previous_transaction_number = row.at(0);
-        std::cout << previous_transaction_number.c_str() << std::endl;
-        int previous_transaction_number_int = std::__cxx11::stoi(previous_transaction_number.c_str());
-        ++previous_transaction_number_int;
-        std::string previous_transaction_number_string = std::to_string(previous_transaction_number_int);
-        transaction_number = previous_transaction_number_string;
-      }
-    }
-    //std::cout << query << std::endl;
-
     auto failed = std::visit(
                              [](auto& ttrace) { return !ttrace.failed_dtrx_trace.empty() ? &ttrace.failed_dtrx_trace[0].recurse : nullptr; }, trace);
     if (failed != nullptr) {
@@ -711,8 +704,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
     values.erase(values.begin()+6);
     values.erase(values.begin()+5);
     values.erase(values.begin()+4);
-    values.push_back(transaction_number);
-    write_stream(block_num, "transactions", values);
+    write_stream_transactions(block_num, "transactions", values);
   } // write_transaction_trace
 
   struct chintai_uint256_t
@@ -726,22 +718,6 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
   {
     for (int i=0; i < action_traces.size(); ++i)
     {
-    work_t t(*sql_connection);
-    std::string action_number = "0";
-    auto query = t.exec("select action_number from chain.actions order by action_number desc limit 1;");
-    if (!query.empty())
-    {
-      auto row = query.at(0);
-      if (!row.empty())
-      {
-        auto previous_action_number = row.at(0);
-        std::cout << previous_action_number.c_str() << std::endl;
-        int previous_action_number_int = std::__cxx11::stoi(previous_action_number.c_str());
-        ++previous_action_number_int;
-        std::string previous_action_number_string = std::to_string(previous_action_number_int);
-        action_number = previous_action_number_string;
-      }
-    }
       chintai_uint256_t xyz;
       memcpy(&xyz, &transaction_id, 32);
       char hexstring[65];  // needs to be at least 64 hex digits + 1 for the null terminator
@@ -749,9 +725,16 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
       char trx_id[32];
       memcpy(trx_id, &transaction_id, 32);
       std::vector<std::string> values{};
-      std::cout << "trx_id: " << hexstring << std::endl;
       values.push_back(std::string(hexstring));
       eosio::ship_protocol::action_trace_v1 trace = std::get<1>(action_traces.at(i));
+
+      if (trace.act.name.to_string() == "onblock" || 
+          trace.act.name.to_string() == "setcode" || 
+          trace.act.name.to_string() == "setabi")
+      {
+        continue;
+      }
+
       values.push_back(std::to_string(uint32_t(trace.action_ordinal)));
       values.push_back(std::to_string(uint32_t(trace.creator_action_ordinal)));
       values.push_back(trace.receiver.to_string());
@@ -760,32 +743,34 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
       std::string authorization_string = get_authorization_string(trace.act.authorization);
       values.push_back(authorization_string);
       size_t remaining_bytes = trace.act.data.remaining();
-      std::cout << "remaining bytes: " << remaining_bytes << std::endl;
       unsigned char * data = new unsigned char[remaining_bytes];
       trace.act.data.read(data, remaining_bytes);
-      std::cout << "data: " << data << std::endl;
       std::string hex_data = hexStr(data, remaining_bytes);
-      std::cout << "data_hex: " << hex_data << std::endl;
       values.push_back(hex_data);
       delete[] data;
       values.push_back(std::to_string(trace.context_free));
       values.push_back(trace.console);
-      values.push_back(action_number);
 
-      write_stream(block_number, "actions", values);
+      std::cout << "The values are: " << std::endl;
+      for (int j = 0; j < values.size(); ++j)
+      {
+        std::cout << values.at(j) << std::endl;
+      }
+
+      write_stream_transactions(block_number, "actions", values);
     }
   } //write_action_traces
 
   std::string get_authorization_string(std::vector<permission_level> const &authorizations)
   {
     std::string authorization_string = "";
-    for (int i = 0; i > authorizations.size(); ++i)
+    for (int i = 0; i < authorizations.size(); ++i)
     {
       permission_level current = authorizations.at(i);
       authorization_string.append(current.actor.to_string());
       authorization_string.append("@");
       authorization_string.append(current.permission.to_string());
-      if (i + 1 <= authorizations.size())
+      if (i + 1 < authorizations.size())
       {
         authorization_string.append(", ");
       }

@@ -36,6 +36,7 @@ RUN cmake -GNinja -DCMAKE_BUILD_TYPE=Release -DPostgreSQL_TYPE_INCLUDE_DIR=/usr/
     ninja && \
     ctest --output-on-failure
 
+
 FROM ubuntu:20.04
 RUN apt-get update && \
     apt-get install -y \

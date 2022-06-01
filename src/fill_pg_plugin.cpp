@@ -761,6 +761,14 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
     }
   } //write_action_traces
 
+  void unpack_action_data() {
+    EOS_ASSERT( packed_action_data_string.size() >= 2, transaction_type_exception, "No packed_action_data found" );
+    vector<char> packed_action_data_blob(packed_action_data_string.size()/2);
+    fc::from_hex(packed_action_data_string, packed_action_data_blob.data(), packed_action_data_blob.size());
+    fc::variant unpacked_action_data_json = bin_to_variant(name(packed_action_data_account_string), name(packed_action_data_name_string), packed_action_data_blob);
+    std::cout << fc::json::to_pretty_string(unpacked_action_data_json) << std::endl;
+  }
+
   std::string get_authorization_string(std::vector<permission_level> const &authorizations)
   {
     std::string authorization_string = "";
@@ -780,16 +788,16 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
   }
 
   static constexpr char hexmap[] = {'0', '1', '2', '3', '4', '5', '6', '7',
-                               '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'};
+    '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'};
 
   std::string hexStr(unsigned char *data, size_t len)
   {
-      std::string s(len * 2, ' ');
-        for (int i = 0; i < len; ++i) {
-              s[2 * i]     = hexmap[(data[i] & 0xF0) >> 4];
-                  s[2 * i + 1] = hexmap[data[i] & 0x0F];
-                    }
-          return s;
+    std::string s(len * 2, ' ');
+    for (int i = 0; i < len; ++i) {
+      s[2 * i]     = hexmap[(data[i] & 0xF0) >> 4];
+      s[2 * i + 1] = hexmap[data[i] & 0x0F];
+    }
+    return s;
   }
 
   void trim() {

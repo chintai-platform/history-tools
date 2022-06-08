@@ -252,15 +252,15 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
     t.exec("insert into " + converter.schema_name + R"(.fill_status values (0, '', 0, '', 0))");
 
     auto exec = [&t](const auto& stmt) { t.exec(stmt); };
-
     converter.create_table("block_info", get_type("signed_block_header"), "block_num bigint, block_id varchar(64)", {"block_num"}, exec);
-    t.exec("create table " + converter.schema_name + ".blocks " + R"((block_number BIGINT CONSTRAINT block_info_pk PRIMARY KEY, block_id varchar(64), timestamp TIMESTAMP, previous varchar(64), transaction_mroot varchar(64), action_mroot varchar(64), producer_signature varchar))");
-
     converter.create_table(
                            "transaction_trace", get_type("transaction_trace"), "block_num bigint, transaction_ordinal integer",
                            {"block_num", "transaction_ordinal"}, exec);
+
+    t.exec("create table " + converter.schema_name + ".blocks " + R"((block_number BIGINT CONSTRAINT block_info_pk PRIMARY KEY, block_id varchar(64), timestamp TIMESTAMP, previous varchar(64), transaction_mroot varchar(64), action_mroot varchar(64), producer_signature varchar))");
     t.exec("create table " + converter.schema_name + ".transactions " + R"((block_number BIGINT, transaction_ordinal INT, id varchar(64), status varchar, transaction_number BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY))");
     t.exec("create table " + converter.schema_name + ".actions " + R"((transaction_id TEXT, action_ordinal INT, creator_action_ordinal INT, receiver varchar(12), action_account varchar(12), action_name varchar(12), action_permission TEXT, action_data TEXT, context_free BOOL, console TEXT, action_number BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY))");
+    t.exec("create table " + converter.schema_name + ".action_data " + R"((action_number BIGINT, key TEXT, value TEXT, type TEXT, id BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY))");
 
     for (auto& table : connection->abi.tables) {
       std::vector<std::string> keys = {"block_num", "present"};
@@ -761,13 +761,6 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
     }
   } //write_action_traces
 
-  void unpack_action_data() {
-    EOS_ASSERT( packed_action_data_string.size() >= 2, transaction_type_exception, "No packed_action_data found" );
-    vector<char> packed_action_data_blob(packed_action_data_string.size()/2);
-    fc::from_hex(packed_action_data_string, packed_action_data_blob.data(), packed_action_data_blob.size());
-    fc::variant unpacked_action_data_json = bin_to_variant(name(packed_action_data_account_string), name(packed_action_data_name_string), packed_action_data_blob);
-    std::cout << fc::json::to_pretty_string(unpacked_action_data_json) << std::endl;
-  }
 
   std::string get_authorization_string(std::vector<permission_level> const &authorizations)
   {

@@ -751,16 +751,27 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
       values.push_back(std::to_string(trace.context_free));
       values.push_back(trace.console);
 
-      std::cout << "The values are: " << std::endl;
-      for (int j = 0; j < values.size(); ++j)
-      {
-        std::cout << values.at(j) << std::endl;
-      }
-
       write_stream_transactions(block_number, "actions", values);
+
+      write_action_data(trace.act.account.to_string(), trace.act.name.to_string(), hex_data);
     }
   } //write_action_traces
 
+  void write_action_data(std::string const &action_account,
+                         std::string const &action_name,
+                         std::string const &action_data)
+  {
+    std::string command = "/usr/bin/cleos -u https://eos.greymass.com convert unpack_action_data " + action_account + " " + action_name + " " + action_data; 
+    const char* char_command = command.c_str(); 
+    std::cout << "Begin" << std::endl;
+    std::cout << "Command: " << command << std::endl;
+    std::cout << "char command: " << char_command << std::endl;
+    auto returned_data = system(char_command);
+    std::cout << "Action json:" << returned_data << std::endl;
+    std::cout << "End." << std::endl;
+    int x = returned_data;
+
+  } //write_action_data
 
   std::string get_authorization_string(std::vector<permission_level> const &authorizations)
   {

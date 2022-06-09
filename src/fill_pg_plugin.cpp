@@ -763,7 +763,8 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
   {
     std::string command = "/usr/bin/cleos -u https://eos.greymass.com convert unpack_action_data " + action_account + " " + action_name + " " + action_data; 
     const char* char_command = command.c_str(); 
-    std::string get_command_line_output(char_command);
+    std::string command_output = get_command_line_output(char_command);
+    std::cout << "Command output: " << command_output << std::endl;
 
   } //write_action_data
 

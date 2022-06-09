@@ -763,15 +763,22 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
   {
     std::string command = "/usr/bin/cleos -u https://eos.greymass.com convert unpack_action_data " + action_account + " " + action_name + " " + action_data; 
     const char* char_command = command.c_str(); 
-    std::cout << "Begin" << std::endl;
-    std::cout << "Command: " << command << std::endl;
-    std::cout << "char command: " << char_command << std::endl;
-    auto returned_data = system(char_command);
-    std::cout << "Action json:" << returned_data << std::endl;
-    std::cout << "End." << std::endl;
-    int x = returned_data;
+    std::string get_command_line_output(char_command);
 
   } //write_action_data
+
+  std::string get_command_line_output(const char* cmd) {
+    std::array<char, 128> buffer;
+    std::string result;
+    std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(cmd, "r"), pclose);
+    if (!pipe) {
+      throw std::runtime_error("popen() failed!");
+    }
+    while (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr) {
+      result += buffer.data();
+    }
+    return result;
+  }
 
   std::string get_authorization_string(std::vector<permission_level> const &authorizations)
   {

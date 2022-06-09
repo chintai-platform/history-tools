@@ -1,6 +1,7 @@
 #!/bin/bash
 
-echo -n $RANDOM | md5sum | head -c 20 > ps_pass
+# echo -n $RANDOM | md5sum | head -c 20 > ps_pass
+echo "qwerty123" > ps_pass
 echo localhost:5432:postgres:postgres:$(cat ps_pass) > ~/.pgpass
 chmod 0600 ~/.pgpass
 

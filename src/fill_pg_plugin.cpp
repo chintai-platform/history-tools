@@ -11,9 +11,7 @@
 #include "abieos_sql_converter.hpp"
 #include <pqxx/tablewriter>
 
-#include <rapidjson/document.h>
-#include <rapidjson/writer.h>
-#include <rapidjson/stringbuffer.h>
+#include <nlohmann/json.hpp>
 
 using namespace appbase;
 using namespace eosio::ship_protocol;

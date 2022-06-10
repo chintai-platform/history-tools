@@ -73,12 +73,12 @@ set(PQXX_LIBRARIES pqxx_static)
 FetchContent_MakeAvailable(libpqxx)
 
 FetchContent_Declare(
-  simdjson
-  GIT_REPOSITORY https://github.com/simdjson/simdjson
-  GIT_TAG a49ac04046932391580bb84ea06d420fdf272fe2
+  nlohmann
+  GIT_REPOSITORY https://github.com/nlohmann/json.git
+  GIT_TAG 4f8fba14066156b73f1189a2b8bd568bde5284c5
 )
 
-FetchContent_MakeAvailable(simdjson)
+FetchContent_MakeAvailable(nlohmann)
 
 # Build Types
 set(CMAKE_BUILD_TYPE ${CMAKE_BUILD_TYPE}

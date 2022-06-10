@@ -583,6 +583,10 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
       {
         columns = {"transaction_id", "action_ordinal", "creator_action_ordinal", "receiver", "action_account", "action_name", "action_permission", "action_data", "context_free", "console"};
       }
+      else if (name == "action_data")
+      {
+        columns = {"action_number", "key", "value" "type"};
+      }
 
       ts = std::make_unique<table_stream>(converter.schema_name + "." + quote_name(name), columns);
     }
@@ -753,11 +757,12 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
 
       write_stream_transactions(block_number, "actions", values);
 
-      write_action_data(trace.act.account.to_string(), trace.act.name.to_string(), hex_data);
+      write_action_data(block_number, trace.act.account.to_string(), trace.act.name.to_string(), hex_data);
     }
   } //write_action_traces
 
-  void write_action_data(std::string const &action_account,
+  void write_action_data(uint32_t const block_number,
+                         std::string const &action_account,
                          std::string const &action_name,
                          std::string const &action_data)
   {
@@ -765,7 +770,10 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
     const char* char_command = command.c_str(); 
     std::string command_output = get_command_line_output(char_command);
     std::cout << "Command output: " << command_output << std::endl;
+    int exit_code = system(char_command);
+    std::cout << "Exit code: " << std::to_string(exit_code) << std::endl;
 
+    write_stream_transactions(block_number, "action_data", values);
   } //write_action_data
 
   std::string get_command_line_output(const char* cmd) {

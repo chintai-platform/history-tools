@@ -769,11 +769,16 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
     std::string command = "/usr/bin/cleos -u https://eos.greymass.com convert unpack_action_data " + action_account + " " + action_name + " " + action_data; 
     const char* char_command = command.c_str(); 
     std::string command_output = get_command_line_output(char_command);
-    std::cout << "Command output: " << command_output << std::endl;
+    //std::cout << "Command output: " << command_output << std::endl;
     int exit_code = system(char_command);
-    std::cout << "Exit code: " << std::to_string(exit_code) << std::endl;
 
-    write_stream_transactions(block_number, "action_data", values);
+    int action_number = t.exec("select action_number from chain.actions order by action_number desc limit 1");
+    std::cout << "Action number: " << std::to_string(action_number) << std::endl;
+
+    Select * From SampleTable 
+      Order By [Date] Desc;
+
+    //write_stream_transactions(block_number, "action_data", values);
   } //write_action_data
 
   std::string get_command_line_output(const char* cmd) {

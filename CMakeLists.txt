@@ -72,6 +72,14 @@ set(PQXX_LIBRARIES pqxx_static)
 
 FetchContent_MakeAvailable(libpqxx)
 
+FetchContent_Declare(
+  rapidjson
+  GIT_REPOSITORY https://github.com/Tencent/rapidjson.git
+  GIT_TAG f54b0e47a08782a6131cc3d60f94d038fa6e0a51
+)
+
+FetchContent_MakeAvailable(rapidjson)
+
 # Build Types
 set(CMAKE_BUILD_TYPE ${CMAKE_BUILD_TYPE}
     CACHE STRING "Choose the type of build, options are: None Debug Release RelWithDebInfo MinSizeRel asan ubsan"

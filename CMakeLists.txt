@@ -73,12 +73,12 @@ set(PQXX_LIBRARIES pqxx_static)
 FetchContent_MakeAvailable(libpqxx)
 
 FetchContent_Declare(
-  rapidjson
-  GIT_REPOSITORY https://github.com/Tencent/rapidjson.git
-  GIT_TAG f54b0e47a08782a6131cc3d60f94d038fa6e0a51
+  simdjson
+  GIT_REPOSITORY https://github.com/simdjson/simdjson
+  GIT_TAG a49ac04046932391580bb84ea06d420fdf272fe2
 )
 
-FetchContent_MakeAvailable(rapidjson)
+FetchContent_MakeAvailable(simdjson)
 
 # Build Types
 set(CMAKE_BUILD_TYPE ${CMAKE_BUILD_TYPE}

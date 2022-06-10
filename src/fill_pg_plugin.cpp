@@ -775,9 +775,6 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
     int action_number = t.exec("select action_number from chain.actions order by action_number desc limit 1");
     std::cout << "Action number: " << std::to_string(action_number) << std::endl;
 
-    Select * From SampleTable 
-      Order By [Date] Desc;
-
     //write_stream_transactions(block_number, "action_data", values);
   } //write_action_data
 

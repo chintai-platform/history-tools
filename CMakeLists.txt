@@ -74,7 +74,7 @@ FetchContent_MakeAvailable(libpqxx)
 
 FetchContent_Declare(
   json
-  GIT_REPOSITORY https://github.com/nlohmann/json
+  GIT_REPOSITORY https://github.com/nlohmann/json.git
   GIT_TAG v3.10.5
   )
 
@@ -115,7 +115,7 @@ target_include_directories(fill-pg
   PRIVATE
   ${Boost_INCLUDE_DIR}
   )
-target_link_libraries(fill-pg appbase fc abieos Boost::date_time Boost::filesystem Boost::chrono 
+target_link_libraries(fill-pg nlohmann_json::nlohmann_json appbase fc abieos Boost::date_time Boost::filesystem Boost::chrono 
   Boost::system Boost::iostreams Boost::program_options Boost::unit_test_framework 
   "${PQXX_LIBRARIES}" -lpthread)
 

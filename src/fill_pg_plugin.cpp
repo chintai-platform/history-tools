@@ -773,7 +773,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
     int exit_code = system(char_command);
     std::cout << "Exit code: " << std::to_string(exit_code) << std::endl;
 
-    write_stream_transactions(block_number, "action_data", values);
+    //write_stream_transactions(block_number, "action_data", values);
   } //write_action_data
 
   std::string get_command_line_output(const char* cmd) {

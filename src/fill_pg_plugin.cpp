@@ -772,6 +772,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
     //std::cout << "Command output: " << command_output << std::endl;
     int exit_code = system(char_command);
 
+    work_t t(*sql_connection);
     int action_number = t.exec("select action_number from chain.actions order by action_number desc limit 1");
     std::cout << "Action number: " << std::to_string(action_number) << std::endl;
 

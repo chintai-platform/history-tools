@@ -587,7 +587,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
       }
       else if (name == "action_data")
       {
-        columns = {"action_number", "key", "value" "type"};
+        columns = {"action_number", "key", "value"};
       }
 
       ts = std::make_unique<table_stream>(converter.schema_name + "." + quote_name(name), columns);
@@ -771,14 +771,22 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
     std::string command = "/usr/bin/cleos -u https://eos.greymass.com convert unpack_action_data " + action_account + " " + action_name + " " + action_data; 
     const char* char_command = command.c_str(); 
     std::string command_output = get_command_line_output(char_command);
-    //std::cout << "Command output: " << command_output << std::endl;
     int exit_code = system(char_command);
 
-    //work_t t(*sql_connection);
-    //int action_number = t.exec("select action_number from chain.actions order by action_number desc limit 1");
-    //std::cout << "Action number: " << std::to_string(action_number) << std::endl;
+    nlohmann::json command_json = nlohmann::json::parse(command_output);
 
-    //write_stream_transactions(block_number, "action_data", values);
+    std::cout << "json value:" << std::endl;
+    std::cout << command_json << std::endl;
+    std::cout << "End." << std::endl;
+
+    for (auto itr = command_json.begin(); itr != command_json.end(); ++itr)
+    {
+      std::vector<std::string> values{};
+      std::cout << "key: " << itr.key() << ", value:" << itr.value() << std::endl;
+      values.push_back(itr.key());
+      values.push_back(itr.value());
+      //write_stream_transactions(block_number, "action_data", values);
+    }
   } //write_action_data
 
   std::string get_command_line_output(const char* cmd) {

@@ -30,6 +30,11 @@ inline std::string to_string(const eosio::checksum256& v) { return sql_str(v); }
 
 inline std::string quote(std::string s) { return "'" + s + "'"; }
 
+/// global variables for recording incremental numbers
+int transaction_number(0);
+int action_number(0);
+int action_data_number(0);
+
 /// a wrapper class for pqxx::work to log the SQL command sent to database
 struct work_t {
   pqxx::work w;
@@ -220,6 +225,13 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
       create_tables();
       config->create_schema = false;
     }
+    else if (block_number == 0) {
+      work_t t(*sql_connection);
+      //block_number = t.exec("select block_number from chain.blocks order by block_number desc limit 1");
+      //transaction_number = t.exec("select transaction_number from chain.transactions order by transaction_number desc limit 1");
+      //action_number = t.exec("select action_number from chain.actions order by action_number desc limit 1");
+      //action_data_number = t.exec("select action_data_number from chain.action_data order by action_data_number desc limit 1");
+    }
     connection->send(get_status_request_v0{});
   }
 
@@ -260,9 +272,9 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
                            {"block_num", "transaction_ordinal"}, exec);
 
     t.exec("create table " + converter.schema_name + ".blocks " + R"((block_number BIGINT CONSTRAINT block_info_pk PRIMARY KEY, block_id varchar(64), timestamp TIMESTAMP, previous varchar(64), transaction_mroot varchar(64), action_mroot varchar(64), producer_signature varchar))");
-    t.exec("create table " + converter.schema_name + ".transactions " + R"((block_number BIGINT, transaction_ordinal INT, id varchar(64), status varchar, transaction_number BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY))");
-    t.exec("create table " + converter.schema_name + ".actions " + R"((transaction_id TEXT, action_ordinal INT, creator_action_ordinal INT, receiver varchar(12), action_account varchar(12), action_name varchar(12), action_permission TEXT, action_data TEXT, context_free BOOL, console TEXT, action_number BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY))");
-    t.exec("create table " + converter.schema_name + ".action_data " + R"((action_number BIGINT, key TEXT, value TEXT, type TEXT, id BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY))");
+    t.exec("create table " + converter.schema_name + ".transactions " + R"((transaction_number BIGINT PRIMARY KEY, block_number BIGINT, transaction_ordinal INT, id varchar(64), status varchar))");
+    t.exec("create table " + converter.schema_name + ".actions " + R"((action_number BIGINT PRIMARY KEY, transaction_id TEXT, action_ordinal INT, creator_action_ordinal INT, receiver varchar(12), action_account varchar(12), action_name varchar(12), action_permission TEXT, action_data TEXT, context_free BOOL, console TEXT))");
+    t.exec("create table " + converter.schema_name + ".action_data " + R"((action_data_number BIGINT PRIMARY KEY, action_number BIGINT, key TEXT, value TEXT))");
 
     for (auto& table : connection->abi.tables) {
       std::vector<std::string> keys = {"block_num", "present"};
@@ -579,15 +591,15 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
       std::vector<std::string> columns;
       if (name == "transactions") 
       {
-        columns = {"block_number", "transaction_ordinal", "id", "status"};
+        columns = {"transaction_number", "block_number", "transaction_ordinal", "id", "status"};
       }
       else if (name == "actions")
       {
-        columns = {"transaction_id", "action_ordinal", "creator_action_ordinal", "receiver", "action_account", "action_name", "action_permission", "action_data", "context_free", "console"};
+        columns = {"action_number", "transaction_id", "action_ordinal", "creator_action_ordinal", "receiver", "action_account", "action_name", "action_permission", "action_data", "context_free", "console"};
       }
       else if (name == "action_data")
       {
-        columns = {"action_number", "key", "value"};
+        columns = {"action_data_number", "action_number", "key", "value"};
       }
 
       ts = std::make_unique<table_stream>(converter.schema_name + "." + quote_name(name), columns);

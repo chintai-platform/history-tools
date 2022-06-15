@@ -235,6 +235,10 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
       global_indexes.transaction_number = transaction_number[0][0].as<int64_t>();
       global_indexes.action_number = action_number[0][0].as<int64_t>();
       global_indexes.action_data_number = action_data_number[0][0].as<int64_t>();
+
+      //ilog(std::to_string(global_indexes.transaction_number));
+      //ilog(std::to_string(global_indexes.action_number));
+      //ilog(std::to_string(global_indexes.action_data_number));
     }
     connection->send(get_status_request_v0{});
   }
@@ -645,6 +649,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
     values.erase(values.begin()+8);
     values.erase(values.begin()+4);
     values.erase(values.begin()+3);
+
     write_stream(block_num, "blocks", values);
   }
 
@@ -806,7 +811,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
       values.push_back(std::to_string(global_indexes.action_data_number));
       values.push_back(std::to_string(global_indexes.action_number));
       values.push_back(itr.key());
-      values.push_back(itr.value());
+      values.push_back(itr.value().dump());
       write_stream_transactions(block_number, "action_data", values);
     }
   } //write_action_data

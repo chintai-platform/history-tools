@@ -31,9 +31,11 @@ inline std::string to_string(const eosio::checksum256& v) { return sql_str(v); }
 inline std::string quote(std::string s) { return "'" + s + "'"; }
 
 /// global variables for recording incremental numbers
-int transaction_number(0);
-int action_number(0);
-int action_data_number(0);
+struct global_t {
+int64_t transaction_number = 0;
+int64_t action_number = 0;
+int64_t action_data_number = 0;
+} global_indexes;
 
 /// a wrapper class for pqxx::work to log the SQL command sent to database
 struct work_t {
@@ -225,12 +227,14 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
       create_tables();
       config->create_schema = false;
     }
-    else if (block_number == 0) {
+    else if (global_indexes.transaction_number == 0) {
       work_t t(*sql_connection);
-      //block_number = t.exec("select block_number from chain.blocks order by block_number desc limit 1");
-      //transaction_number = t.exec("select transaction_number from chain.transactions order by transaction_number desc limit 1");
-      //action_number = t.exec("select action_number from chain.actions order by action_number desc limit 1");
-      //action_data_number = t.exec("select action_data_number from chain.action_data order by action_data_number desc limit 1");
+      auto transaction_number = t.exec("select transaction_number from chain.transactions order by transaction_number desc limit 1");
+      auto action_number = t.exec("select action_number from chain.actions order by action_number desc limit 1");
+      auto action_data_number = t.exec("select action_data_number from chain.action_data order by action_data_number desc limit 1");
+      global_indexes.transaction_number = transaction_number[0][0].as<int64_t>();
+      global_indexes.action_number = action_number[0][0].as<int64_t>();
+      global_indexes.action_data_number = action_data_number[0][0].as<int64_t>();
     }
     connection->send(get_status_request_v0{});
   }
@@ -722,6 +726,10 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
     values.erase(values.begin()+6);
     values.erase(values.begin()+5);
     values.erase(values.begin()+4);
+
+    global_indexes.transaction_number++;
+    values.insert(values.begin(), std::to_string(global_indexes.transaction_number));
+
     write_stream_transactions(block_num, "transactions", values);
   } // write_transaction_trace
 
@@ -769,6 +777,9 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
       values.push_back(std::to_string(trace.context_free));
       values.push_back(trace.console);
 
+      global_indexes.action_number++;
+      values.insert(values.begin(), std::to_string(global_indexes.action_number));
+
       write_stream_transactions(block_number, "actions", values);
 
       write_action_data(block_number, trace.act.account.to_string(), trace.act.name.to_string(), hex_data);
@@ -787,17 +798,16 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
 
     nlohmann::json command_json = nlohmann::json::parse(command_output);
 
-    std::cout << "json value:" << std::endl;
-    std::cout << command_json << std::endl;
-    std::cout << "End." << std::endl;
-
     for (auto itr = command_json.begin(); itr != command_json.end(); ++itr)
     {
       std::vector<std::string> values{};
-      std::cout << "key: " << itr.key() << ", value:" << itr.value() << std::endl;
+
+      global_indexes.action_data_number++;
+      values.push_back(std::to_string(global_indexes.action_data_number));
+      values.push_back(std::to_string(global_indexes.action_number));
       values.push_back(itr.key());
       values.push_back(itr.value());
-      //write_stream_transactions(block_number, "action_data", values);
+      write_stream_transactions(block_number, "action_data", values);
     }
   } //write_action_data
 

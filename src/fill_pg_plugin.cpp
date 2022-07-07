@@ -666,10 +666,10 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
 
   void receive_deltas(uint32_t block_num, eosio::opaque<std::vector<eosio::ship_protocol::table_delta>> delta, bool bulk) {
     for_each(delta, [ this, block_num, bulk ](auto t_delta){
-             if (std::get<1>(t_delta).name == "account")
-             {
+              if (std::get<1>(t_delta).name == "account")
+              {
              write_table_delta(block_num, std::move(t_delta), bulk);
-             }
+              }
              });
   }
 
@@ -770,9 +770,10 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
       values.push_back(std::string(hexstring));
       eosio::ship_protocol::action_trace_v1 trace = std::get<1>(action_traces.at(i));
 
-      if (trace.act.name.to_string() == "onblock" ||
-          trace.act.name.to_string() == "setcode" ||
-          trace.act.name.to_string() == "setabi")
+      if (trace.act.name.to_string() == "onblock" || 
+          trace.act.name.to_string() == "setcode" || 
+          trace.act.name.to_string() == "setabi" ||
+	  trace.act.account.to_string() == "eosio.null")
       {
         continue;
       }
@@ -807,11 +808,15 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
                          std::string const &action_name,
                          std::string const &action_data)
   {
-    std::string command = "/usr/bin/cleos -u https://eos.greymass.com convert unpack_action_data " + action_account + " " + action_name + " " + action_data;
-    const char* char_command = command.c_str();
+    std::string command = "/usr/bin/cleos -u http://192.168.12.154:8888 convert unpack_action_data " + action_account + " " + action_name + " " + action_data; 
+
+    ilog("cleos_command: ${c}", ("c", command));
+    const char* char_command = command.c_str(); 
+
     std::string command_output = get_command_line_output(char_command);
     int exit_code = system(char_command);
 
+    ilog("command_output: #${c}#", ("c", command_output));
     nlohmann::json command_json = nlohmann::json::parse(command_output);
 
     for (auto itr = command_json.begin(); itr != command_json.end(); ++itr)

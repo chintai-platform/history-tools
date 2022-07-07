@@ -25,17 +25,17 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
-   if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS 8.0)
-      message(FATAL_ERROR "GCC version must be at least 8.0.")
-   endif()
-   if("${CMAKE_GENERATOR}" STREQUAL "Ninja")
-      add_compile_options(-fdiagnostics-color=always)
-   endif()
+  if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS 8.0)
+    message(FATAL_ERROR "GCC version must be at least 8.0.")
+  endif()
+  if("${CMAKE_GENERATOR}" STREQUAL "Ninja")
+    add_compile_options(-fdiagnostics-color=always)
+  endif()
 endif()
 
 # add defaults for openssl
 if(APPLE AND UNIX AND "${OPENSSL_ROOT_DIR}" STREQUAL "")
-   set(OPENSSL_ROOT_DIR "/usr/local/opt/openssl@1.1")
+  set(OPENSSL_ROOT_DIR "/usr/local/opt/openssl@1.1")
 endif()
 
 set(SKIP_FC_TESTS ON)
@@ -44,58 +44,66 @@ FetchContent_Declare(
   fc
   GIT_REPOSITORY https://github.com/EOSIO/fc.git
   GIT_TAG 50d57cbc6b2d1af6fd4a0930a5c98f7add900078       
-)
+  )
 FetchContent_MakeAvailable(fc)
 
 FetchContent_Declare(
   appbase
   GIT_REPOSITORY https://github.com/EOSIO/appbase.git
   GIT_TAG 144b2e239d6fd93a8336543bf9eda7c52ea8c77e       
-)
+  )
 FetchContent_MakeAvailable(appbase)
 
 FetchContent_Declare(
   abieos
   GIT_REPOSITORY https://github.com/EOSIO/abieos.git
   GIT_TAG acde00fc7d4b743e599ced8886a013cb16cccbc2
-)
+  )
 FetchContent_MakeAvailable(abieos)
 
 FetchContent_Declare(
   libpqxx
   GIT_REPOSITORY https://github.com/jtv/libpqxx.git
   GIT_TAG a6b1d60e74c1427c8ac2324b85cd4a0dc2068332       
-)
+  )
 set(SKIP_PQXX_SHARED ON)
 set(SKIP_BUILD_TEST ON)
 set(PQXX_LIBRARIES pqxx_static)
 
 FetchContent_MakeAvailable(libpqxx)
 
+FetchContent_Declare(
+  json
+  GIT_REPOSITORY https://github.com/nlohmann/json.git
+  GIT_TAG v3.10.5
+  )
+
+FetchContent_MakeAvailable(json)
+
 # Build Types
 set(CMAKE_BUILD_TYPE ${CMAKE_BUILD_TYPE}
-    CACHE STRING "Choose the type of build, options are: None Debug Release RelWithDebInfo MinSizeRel asan ubsan"
-    FORCE)
+  CACHE STRING "Choose the type of build, options are: None Debug Release RelWithDebInfo MinSizeRel asan ubsan"
+  FORCE)
 
 # AddressSanitize
 set(CMAKE_C_FLAGS_ASAN
-    "-fsanitize=address -fno-optimize-sibling-calls -fsanitize-address-use-after-scope -fno-omit-frame-pointer -g -O1"
-    CACHE STRING "Flags used by the C compiler during AddressSanitizer builds."
-    FORCE)
+  "-fsanitize=address -fno-optimize-sibling-calls -fsanitize-address-use-after-scope -fno-omit-frame-pointer -g -O1"
+  CACHE STRING "Flags used by the C compiler during AddressSanitizer builds."
+  FORCE)
 set(CMAKE_CXX_FLAGS_ASAN
-    "-fsanitize=address -fno-optimize-sibling-calls -fsanitize-address-use-after-scope -fno-omit-frame-pointer -g -O1"
-    CACHE STRING "Flags used by the C++ compiler during AddressSanitizer builds."
-    FORCE)
+  "-fsanitize=address -fno-optimize-sibling-calls -fsanitize-address-use-after-scope -fno-omit-frame-pointer -g -O1"
+  CACHE STRING "Flags used by the C++ compiler during AddressSanitizer builds."
+  FORCE)
 
 # UndefinedBehaviour
 set(CMAKE_C_FLAGS_UBSAN
-    "-fsanitize=undefined"
-    CACHE STRING "Flags used by the C compiler during UndefinedBehaviourSanitizer builds."
-    FORCE)
+  "-fsanitize=undefined"
+  CACHE STRING "Flags used by the C compiler during UndefinedBehaviourSanitizer builds."
+  FORCE)
 set(CMAKE_CXX_FLAGS_UBSAN
-    "-fsanitize=undefined"
-    CACHE STRING "Flags used by the C++ compiler during UndefinedBehaviourSanitizer builds."
-    FORCE)
+  "-fsanitize=undefined"
+  CACHE STRING "Flags used by the C++ compiler during UndefinedBehaviourSanitizer builds."
+  FORCE)
 
 set(WITH_TESTS OFF)
 
@@ -104,28 +112,28 @@ add_compile_options(-Wno-error=shadow)
 add_executable(fill-pg src/main.cpp src/fill_plugin.cpp src/pg_plugin.cpp src/fill_pg_plugin.cpp src/abieos_sql_converter.cpp)
 
 target_include_directories(fill-pg
-    PRIVATE
-        ${Boost_INCLUDE_DIR}
-)
-target_link_libraries(fill-pg appbase fc abieos Boost::date_time Boost::filesystem Boost::chrono 
-                      Boost::system Boost::iostreams Boost::program_options Boost::unit_test_framework 
-                      "${PQXX_LIBRARIES}" -lpthread)
+  PRIVATE
+  ${Boost_INCLUDE_DIR}
+  )
+target_link_libraries(fill-pg nlohmann_json::nlohmann_json appbase fc abieos Boost::date_time Boost::filesystem Boost::chrono 
+  Boost::system Boost::iostreams Boost::program_options Boost::unit_test_framework 
+  "${PQXX_LIBRARIES}" -lpthread)
 
 if(APPLE)
 else()
-    target_link_libraries(fill-pg -latomic)
+  target_link_libraries(fill-pg -latomic)
 endif()
 target_compile_options(fill-pg PUBLIC -DAPP_NAME="fill-pg" "-DDEFAULT_PLUGINS=fill_pg_plugin;-DINCLUDE_FILL_PG_PLUGIN")
 
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")
-    target_compile_options(fill-pg PRIVATE -D DEBUG)
+  target_compile_options(fill-pg PRIVATE -D DEBUG)
 endif (CMAKE_BUILD_TYPE STREQUAL "Debug")
 
 if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-    target_compile_options(fill-pg PRIVATE -Wall -Wextra -Wno-unused-parameter -fcolor-diagnostics -Wno-sign-compare -Wno-unused-variable -Wno-macro-redefined)
+  target_compile_options(fill-pg PRIVATE -Wall -Wextra -Wno-unused-parameter -fcolor-diagnostics -Wno-sign-compare -Wno-unused-variable -Wno-macro-redefined)
 endif()
 if (CMAKE_CXX_COMPILER_ID MATCHES "GNU")
-    target_compile_options(fill-pg PRIVATE -fdiagnostics-color=auto)
+  target_compile_options(fill-pg PRIVATE -fdiagnostics-color=auto)
 endif()
 enable_testing()
 add_subdirectory( unittests )

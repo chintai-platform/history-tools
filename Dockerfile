@@ -8,6 +8,7 @@ RUN apt-get update && \
         build-essential \
         cmake \
         curl \
+        wget \
         git \
         libboost-all-dev \
         libcurl4-openssl-dev \
@@ -19,6 +20,7 @@ RUN apt-get update && \
         openssl \
         python3-pkgconfig && \
     apt-get clean && \
+
     rm -rf /var/cache/apt/lists/*
 
 FROM base as builder
@@ -43,6 +45,10 @@ RUN apt-get update && \
         netcat \
         openssl \
         postgresql-client && \
+        wget && \
+    wget https://github.com/EOSIO/eos/releases/download/v2.1.0/eosio_2.1.0-1-ubuntu-20.04_amd64.deb && \
+
+    apt install -y ./eosio_2.1.0-1-ubuntu-20.04_amd64.deb && \
     apt-get clean && \
     rm -rf /var/cache/apt/lists/*
 

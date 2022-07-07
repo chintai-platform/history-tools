@@ -11,6 +11,8 @@
 #include "abieos_sql_converter.hpp"
 #include <pqxx/tablewriter>
 
+#include <nlohmann/json.hpp>
+
 using namespace appbase;
 using namespace eosio::ship_protocol;
 using namespace state_history;
@@ -27,6 +29,13 @@ using boost::system::error_code;
 inline std::string to_string(const eosio::checksum256& v) { return sql_str(v); }
 
 inline std::string quote(std::string s) { return "'" + s + "'"; }
+
+/// global variables for recording incremental numbers
+struct global_t {
+int64_t transaction_number = 0;
+int64_t action_number = 0;
+int64_t action_data_number = 0;
+} global_indexes;
 
 /// a wrapper class for pqxx::work to log the SQL command sent to database
 struct work_t {
@@ -218,6 +227,28 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
       create_tables();
       config->create_schema = false;
     }
+    else if (global_indexes.transaction_number == 0) {
+      work_t t(*sql_connection);
+      auto transaction_number = t.exec("select transaction_number from chain.transactions order by transaction_number desc limit 1");
+      auto action_number = t.exec("select action_number from chain.actions order by action_number desc limit 1");
+      auto action_data_number = t.exec("select action_data_number from chain.action_data order by action_data_number desc limit 1");
+      if (!transaction_number.empty()) {
+          global_indexes.transaction_number = transaction_number[0][0].as<int64_t>();
+      } else {
+	  global_indexes.transaction_number = 0;
+      }
+      if (!action_number.empty()) {
+          global_indexes.action_number = action_number[0][0].as<int64_t>();
+      } else {
+          global_indexes.action_number = 0;
+      }
+      if (!action_data_number.empty()) {
+          global_indexes.action_data_number = action_data_number[0][0].as<int64_t>();
+      } else {
+          global_indexes.action_data_number = 0;
+      }
+
+    }
     connection->send(get_status_request_v0{});
   }
 
@@ -252,15 +283,15 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
     t.exec("insert into " + converter.schema_name + R"(.fill_status values (0, '', 0, '', 0))");
 
     auto exec = [&t](const auto& stmt) { t.exec(stmt); };
-
     converter.create_table("block_info", get_type("signed_block_header"), "block_num bigint, block_id varchar(64)", {"block_num"}, exec);
-    t.exec("create table " + converter.schema_name + ".blocks " + R"((block_number BIGINT CONSTRAINT block_info_pk PRIMARY KEY, block_id varchar(64), timestamp TIMESTAMP, previous varchar(64), transaction_mroot varchar(64), action_mroot varchar(64), producer_signature varchar))");
-
     converter.create_table(
                            "transaction_trace", get_type("transaction_trace"), "block_num bigint, transaction_ordinal integer",
                            {"block_num", "transaction_ordinal"}, exec);
-    t.exec("create table " + converter.schema_name + ".transactions " + R"((block_number BIGINT, transaction_ordinal INT, id varchar(64), status varchar, transaction_number BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY))");
-    t.exec("create table " + converter.schema_name + ".actions " + R"((transaction_id TEXT, action_ordinal INT, creator_action_ordinal INT, receiver varchar(12), action_account varchar(12), action_name varchar(12), action_permission TEXT, action_data TEXT, context_free BOOL, console TEXT, action_number BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY))");
+
+    t.exec("create table " + converter.schema_name + ".blocks " + R"((block_number BIGINT CONSTRAINT block_info_pk PRIMARY KEY, block_id varchar(64), timestamp TIMESTAMP, previous varchar(64), transaction_mroot varchar(64), action_mroot varchar(64), producer_signature varchar))");
+    t.exec("create table " + converter.schema_name + ".transactions " + R"((transaction_number BIGINT PRIMARY KEY, block_number BIGINT, transaction_ordinal INT, id varchar(64), status varchar))");
+    t.exec("create table " + converter.schema_name + ".actions " + R"((action_number BIGINT PRIMARY KEY, transaction_id TEXT, action_ordinal INT, creator_action_ordinal INT, receiver varchar(12), action_account varchar(12), action_name varchar(12), action_permission TEXT, action_data TEXT, context_free BOOL, console TEXT))");
+    t.exec("create table " + converter.schema_name + ".action_data " + R"((action_data_number BIGINT PRIMARY KEY, action_number BIGINT, key TEXT, value TEXT))");
 
     for (auto& table : connection->abi.tables) {
       std::vector<std::string> keys = {"block_num", "present"};
@@ -311,7 +342,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
     static const char* const simple_cases[] = {
       "received_block",
       "transaction_trace",
-      "block_info",
+      "blocks",
     };
 
     for (const char* table : simple_cases) {
@@ -384,7 +415,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
       };
     }
     query += R"(
-                end 
+                end
             $$ language plpgsql;
         )";
 
@@ -432,7 +463,9 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
     };
     trunc("received_block");
     trunc("transaction_trace");
-    trunc("block_info");
+      std::string query{"delete from " + converter.schema_name + "." + quote_name("blocks") +
+        " where block_number >= " + std::to_string(block)};
+      pipeline.insert(query);
     for (auto& table : connection->abi.tables) {
       trunc(table.type);
     }
@@ -558,7 +591,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
                                  receive_traces(
                                                 result.this_block->block_num, eosio::as_opaque<std::vector<eosio::ship_protocol::transaction_trace>>(*result.traces));
                                  });
-  } 
+  }
 
   void write_stream(uint32_t block_num, const std::string& name, const std::vector<std::string>& values) {
     if (!first_bulk)
@@ -575,13 +608,17 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
     auto& ts = table_streams[name];
     if (!ts) {
       std::vector<std::string> columns;
-      if (name == "transactions") 
+      if (name == "transactions")
       {
-        columns = {"block_number", "transaction_ordinal", "id", "status"};
+        columns = {"transaction_number", "block_number", "transaction_ordinal", "id", "status"};
       }
       else if (name == "actions")
       {
-        columns = {"transaction_id", "action_ordinal", "creator_action_ordinal", "receiver", "action_account", "action_name", "action_permission", "action_data", "context_free", "console"};
+        columns = {"action_number", "transaction_id", "action_ordinal", "creator_action_ordinal", "receiver", "action_account", "action_name", "action_permission", "action_data", "context_free", "console"};
+      }
+      else if (name == "action_data")
+      {
+        columns = {"action_data_number", "action_number", "key", "value"};
       }
 
       ts = std::make_unique<table_stream>(converter.schema_name + "." + quote_name(name), columns);
@@ -623,15 +660,16 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
     values.erase(values.begin()+8);
     values.erase(values.begin()+4);
     values.erase(values.begin()+3);
+
     write_stream(block_num, "blocks", values);
   }
 
   void receive_deltas(uint32_t block_num, eosio::opaque<std::vector<eosio::ship_protocol::table_delta>> delta, bool bulk) {
     for_each(delta, [ this, block_num, bulk ](auto t_delta){
-             if (std::get<1>(t_delta).name == "account")
-             {
+              if (std::get<1>(t_delta).name == "account")
+              {
              write_table_delta(block_num, std::move(t_delta), bulk);
-             }
+              }
              });
   }
 
@@ -692,7 +730,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
     std::vector<std::string> values{std::to_string(block_num), std::to_string(transaction_ordinal)};
     converter.to_sql_values(trace_bin, "transaction_trace", *get_type("transaction_trace").as_variant(), values);
 
-    // delete unwanted values here. 
+    // delete unwanted values here.
     values.erase(values.begin()+14);
     values.erase(values.begin()+13);
     values.erase(values.begin()+12);
@@ -704,6 +742,10 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
     values.erase(values.begin()+6);
     values.erase(values.begin()+5);
     values.erase(values.begin()+4);
+
+    global_indexes.transaction_number++;
+    values.insert(values.begin(), std::to_string(global_indexes.transaction_number));
+
     write_stream_transactions(block_num, "transactions", values);
   } // write_transaction_trace
 
@@ -713,7 +755,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
   };
 
   void write_action_traces(uint32_t const block_number,
-                           eosio::checksum256 const transaction_id, 
+                           eosio::checksum256 const transaction_id,
                            std::vector<eosio::ship_protocol::action_trace> const &action_traces)
   {
     for (int i=0; i < action_traces.size(); ++i)
@@ -730,7 +772,8 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
 
       if (trace.act.name.to_string() == "onblock" || 
           trace.act.name.to_string() == "setcode" || 
-          trace.act.name.to_string() == "setabi")
+          trace.act.name.to_string() == "setabi" ||
+	  trace.act.account.to_string() == "eosio.null")
       {
         continue;
       }
@@ -751,15 +794,56 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
       values.push_back(std::to_string(trace.context_free));
       values.push_back(trace.console);
 
-      std::cout << "The values are: " << std::endl;
-      for (int j = 0; j < values.size(); ++j)
-      {
-        std::cout << values.at(j) << std::endl;
-      }
+      global_indexes.action_number++;
+      values.insert(values.begin(), std::to_string(global_indexes.action_number));
 
       write_stream_transactions(block_number, "actions", values);
+
+      write_action_data(block_number, trace.act.account.to_string(), trace.act.name.to_string(), hex_data);
     }
   } //write_action_traces
+
+  void write_action_data(uint32_t const block_number,
+                         std::string const &action_account,
+                         std::string const &action_name,
+                         std::string const &action_data)
+  {
+    std::string command = "/usr/bin/cleos -u http://192.168.12.154:8888 convert unpack_action_data " + action_account + " " + action_name + " " + action_data; 
+
+    ilog("cleos_command: ${c}", ("c", command));
+    const char* char_command = command.c_str(); 
+
+    std::string command_output = get_command_line_output(char_command);
+    int exit_code = system(char_command);
+
+    ilog("command_output: #${c}#", ("c", command_output));
+    nlohmann::json command_json = nlohmann::json::parse(command_output);
+
+    for (auto itr = command_json.begin(); itr != command_json.end(); ++itr)
+    {
+      std::vector<std::string> values{};
+
+      global_indexes.action_data_number++;
+      values.push_back(std::to_string(global_indexes.action_data_number));
+      values.push_back(std::to_string(global_indexes.action_number));
+      values.push_back(itr.key());
+      values.push_back(itr.value().dump());
+      write_stream_transactions(block_number, "action_data", values);
+    }
+  } //write_action_data
+
+  std::string get_command_line_output(const char* cmd) {
+    std::array<char, 128> buffer;
+    std::string result;
+    std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(cmd, "r"), pclose);
+    if (!pipe) {
+      throw std::runtime_error("popen() failed!");
+    }
+    while (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr) {
+      result += buffer.data();
+    }
+    return result;
+  }
 
   std::string get_authorization_string(std::vector<permission_level> const &authorizations)
   {
@@ -780,16 +864,16 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
   }
 
   static constexpr char hexmap[] = {'0', '1', '2', '3', '4', '5', '6', '7',
-                               '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'};
+    '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'};
 
   std::string hexStr(unsigned char *data, size_t len)
   {
-      std::string s(len * 2, ' ');
-        for (int i = 0; i < len; ++i) {
-              s[2 * i]     = hexmap[(data[i] & 0xF0) >> 4];
-                  s[2 * i + 1] = hexmap[data[i] & 0x0F];
-                    }
-          return s;
+    std::string s(len * 2, ' ');
+    for (int i = 0; i < len; ++i) {
+      s[2 * i]     = hexmap[(data[i] & 0xF0) >> 4];
+      s[2 * i + 1] = hexmap[data[i] & 0x0F];
+    }
+    return s;
   }
 
   void trim() {

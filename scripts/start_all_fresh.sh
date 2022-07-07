@@ -14,5 +14,5 @@ echo "Starting PSQL"
 echo "Starting Nodeos"
 ./start_nodeos.sh
 
-echo "Starting Fill-pg"
-./start_fpg_create.sh
+ #echo "Starting Fill-pg"
+ #./start_fpg_create.sh

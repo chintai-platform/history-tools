@@ -738,7 +738,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
      std::cout << values.at(i) << std::endl;
    } 
 
-   if (valus_at(i) == '0')
+   if (values_at(i) == '0')
    {
      write_table_row(block_num, values);
    }

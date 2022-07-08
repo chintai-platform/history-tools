@@ -752,7 +752,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
     values.erase(values.begin()+6);
     values.erase(values.begin()+1);
 
-    global_indexes.transaction_number++;
+    global_indexes.table_row_number++;
     values.insert(values.begin(), std::to_string(global_indexes.transaction_number));
 
     write_stream_custom(block_num, "table_rows", values);

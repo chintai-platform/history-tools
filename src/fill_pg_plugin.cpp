@@ -738,15 +738,15 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
      std::cout << values.at(i) << std::endl;
    } 
 
-   uint8_t received = values.at(1);
-   if (received == 0)
+   char received = values.at(1);
+   if (received == '0')
    {
      write_table_row(values);
    }
     //take contract_row deltas, store it in table_row_data
   }
 
-  write_table_row(uint32_t block_num, std::string table_name, std::vector<std::string> values)
+  void write_table_row(std::vector<std::string> values)
   {
     //delete value, payer, and present
     values.erase(values.begin()+7);

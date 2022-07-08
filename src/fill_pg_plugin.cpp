@@ -752,11 +752,11 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
 
     global_indexes.table_row_number++;
     table_row_values.push_back(std::to_string(global_indexes.table_row_number));
-    table_row_values.push_back(values.begin());
-    table_row_values.push_back(values.begin()+2);
-    table_row_values.push_back(values.begin()+3);
-    table_row_values.push_back(values.begin()+4);
-    table_row_values.push_back(values.begin()+5);
+    table_row_values.push_back(values.at(0));
+    table_row_values.push_back(values.at(2));
+    table_row_values.push_back(values.at(3));
+    table_row_values.push_back(values.at(4));
+    table_row_values.push_back(values.at(5));
 
     write_stream_custom(block_num, "table_rows", table_row_values);
   }

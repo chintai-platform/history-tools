@@ -748,15 +748,17 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
 
   void write_table_row(uint32_t block_num, std::vector<std::string> values)
   {
-    //delete value, payer, and present
-    values.erase(values.begin()+7);
-    values.erase(values.begin()+6);
-    values.erase(values.begin()+1);
+    std::vector<std::string> table_row_values;
 
     global_indexes.table_row_number++;
-    values.insert(values.begin(), std::to_string(global_indexes.table_row_number));
+    table_row_values.push_back(std::to_string(global_indexes.table_row_number));
+    table_row_values.push_back(values.begin());
+    table_row_values.push_back(values.begin()+2);
+    table_row_values.push_back(values.begin()+3);
+    table_row_values.push_back(values.begin()+4);
+    table_row_values.push_back(values.begin()+5);
 
-    write_stream_custom(block_num, "table_rows", values);
+    write_stream_custom(block_num, "table_rows", table_row_values);
   }
 
   void receive_traces(uint32_t block_num, eosio::opaque<std::vector<eosio::ship_protocol::transaction_trace>> traces) {

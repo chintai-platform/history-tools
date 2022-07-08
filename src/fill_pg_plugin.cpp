@@ -726,19 +726,18 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
   }
 
   void process_deltas(uint32_t block_num, std::string table_name, std::vector<std::string> values) {
-    if (table_name == "contract_table") {
-      process_table_row_delta();
-    }
-    else if (table_name == "contract_row") {
-      process_table_row_data_delta();
+    if (table_name == "contract_row") {
+      process_table_row_delta(block_num, table_name, values);
     }
   }
 
-  void process_table_row_delta() {
+  void process_table_row_delta(uint32_t block_num, std::string table_name, std::vector<std::string> values) {
+    std::cout << "The delta values are: " << std::endl;
+   for (int i=0; i < values.size(); ++i)
+   {
+     std::cout << values.at(i) << std::endl;
+   } 
     //take contract_table deltas, store it in table_rows
-  }
-
-  void process_table_row_data_delta() {
     //take contract_row deltas, store it in table_row_data
   }
 

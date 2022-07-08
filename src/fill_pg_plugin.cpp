@@ -306,7 +306,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
     t.exec("create table " + converter.schema_name + ".transactions " + R"((transaction_number BIGINT PRIMARY KEY, block_number BIGINT, transaction_ordinal INT, id varchar(64), status varchar))");
     t.exec("create table " + converter.schema_name + ".actions " + R"((action_number BIGINT PRIMARY KEY, transaction_id TEXT, action_ordinal INT, creator_action_ordinal INT, receiver varchar(12), action_account varchar(12), action_name varchar(12), action_permission TEXT, action_data TEXT, context_free BOOL, console TEXT))");
     t.exec("create table " + converter.schema_name + ".action_data " + R"((action_data_number BIGINT PRIMARY KEY, action_number BIGINT, key TEXT, value TEXT))");
-    t.exec("create table " + converter.schema_name + ".table_rows " + R"((table_row_number BIGINT PRIMARY KEY, block_number BIGINT, account TEXT, scope TEXT, table TEXT))");
+    t.exec("create table " + converter.schema_name + ".table_rows " + R"((table_row_number BIGINT PRIMARY KEY, block_number BIGINT, account TEXT, scope TEXT, table_name TEXT, primary_key TEXT))");
     t.exec("create table " + converter.schema_name + ".table_row_data " + R"((table_row_data_number BIGINT PRIMARY KEY, table_row_number BIGINT, key TEXT, value TEXT))");
 
     for (auto& table : connection->abi.tables) {
@@ -638,7 +638,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
       }
       else if (name == "table_rows")
       {
-        columns = {"table_row_number", "block_number", "account", "scope", "table"};
+        columns = {"table_row_number", "block_number", "account", "scope", "table_name", "primary_key"};
       }
       else if (name == "table_row_data")
       {

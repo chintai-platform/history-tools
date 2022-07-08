@@ -737,8 +737,26 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
    {
      std::cout << values.at(i) << std::endl;
    } 
-    //take contract_table deltas, store it in table_rows
+
+   uint8_t received = values.at(1);
+   if (received == 0)
+   {
+     write_table_row(values);
+   }
     //take contract_row deltas, store it in table_row_data
+  }
+
+  write_table_row(uint32_t block_num, std::string table_name, std::vector<std::string> values)
+  {
+    //delete value, payer, and present
+    values.erase(values.begin()+7);
+    values.erase(values.begin()+6);
+    values.erase(values.begin()+1);
+
+    global_indexes.transaction_number++;
+    values.insert(values.begin(), std::to_string(global_indexes.transaction_number));
+
+    write_stream_custom(block_num, "table_rows", values);
   }
 
   void receive_traces(uint32_t block_num, eosio::opaque<std::vector<eosio::ship_protocol::transaction_trace>> traces) {
@@ -852,13 +870,11 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
   {
     std::string command = "/usr/bin/cleos -u http://192.168.12.154:8888 convert unpack_action_data " + action_account + " " + action_name + " " + action_data; 
 
-    ilog("cleos_command: ${c}", ("c", command));
     const char* char_command = command.c_str(); 
 
     std::string command_output = get_command_line_output(char_command);
     int exit_code = system(char_command);
 
-    ilog("command_output: #${c}#", ("c", command_output));
     nlohmann::json command_json = nlohmann::json::parse(command_output);
 
     for (auto itr = command_json.begin(); itr != command_json.end(); ++itr)

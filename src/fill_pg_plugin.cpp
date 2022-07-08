@@ -234,7 +234,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
       auto transaction_number = t.exec("select transaction_number from chain.transactions order by transaction_number desc limit 1");
       auto action_number = t.exec("select action_number from chain.actions order by action_number desc limit 1");
       auto action_data_number = t.exec("select action_data_number from chain.action_data order by action_data_number desc limit 1");
-      auto table_row_number = t.exec("select table_row_number from chain.table_row order by table_row_number desc limit 1");
+      auto table_row_number = t.exec("select table_row_number from chain.table_rows order by table_row_number desc limit 1");
       auto table_row_data_number = t.exec("select table_row_data_number from chain.table_row_data order by table_row_data_number desc limit 1");
       if (!transaction_number.empty()) {
           global_indexes.transaction_number = transaction_number[0][0].as<int64_t>();

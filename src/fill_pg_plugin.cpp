@@ -239,7 +239,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
       if (!transaction_number.empty()) {
           global_indexes.transaction_number = transaction_number[0][0].as<int64_t>();
       } else {
-	  global_indexes.transaction_number = 0;
+	        global_indexes.transaction_number = 0;
       }
       if (!action_number.empty()) {
           global_indexes.action_number = action_number[0][0].as<int64_t>();
@@ -754,7 +754,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
     values.erase(values.begin()+1);
 
     global_indexes.table_row_number++;
-    values.insert(values.begin(), std::to_string(global_indexes.transaction_number));
+    values.insert(values.begin(), std::to_string(global_indexes.table_row_number));
 
     write_stream_custom(block_num, "table_rows", values);
   }

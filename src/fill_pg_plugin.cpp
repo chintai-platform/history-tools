@@ -718,35 +718,46 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
                else if (type.as_struct())
                converter.to_sql_values(row.data, *type.as_struct(), values);
                write_stream(block_num, t_delta.name, values);
-               process_deltas(block_num, t_delta.name, values);
+               process_deltas(block_num, t_delta, values);
                ++num_processed;
                }
                },
       t_delta);
   }
 
-  void process_deltas(uint32_t block_num, std::string table_name, std::vector<std::string> values) {
+  void process_deltas(uint32_t const block_num, table_delta &&t_delta, std::vector<std::string> values) {
     if (table_name == "contract_row") {
-      process_table_row_delta(block_num, table_name, values);
+      process_table_row_delta(block_num, t_delta, values);
     }
   }
 
-  void process_table_row_delta(uint32_t block_num, std::string table_name, std::vector<std::string> values) {
+  void process_table_row_delta(uint32_t const block_num, table_delta &&t_delta, std::vector<std::string> values) {
     std::cout << "The delta values are: " << std::endl;
-   for (int i=0; i < values.size(); ++i)
-   {
-     std::cout << values.at(i) << std::endl;
-   } 
+    for (int i=0; i < values.size(); ++i)
+    {
+      std::cout << values.at(i) << std::endl;
+    } 
 
-   //if (values.at(1) == "2")
-   //{
-     write_table_row(block_num, values);
-   //}
+    for (int i=0; i < t_delta.rows.size(); ++i)
+    {
+    size_t remaining_bytes = t_delta.rows.at(i).data.remaining();
+    unsigned char * data = new unsigned char[remaining_bytes];
+    t_delta.rows.at(i).data.read(data, remaining_bytes);
+    std::string hex_data = hexStr(data, remaining_bytes);
+  //  values.push_back(hex_data);
+  //  delete[] data;
+    std::cout << "Row value " << std::to_string(i) << ": " << hex_data << std::endl;
+    }
+
+    //if (values.at(1) == "2")
+    //{
+      write_table_row(block_num, values);
+    //}
 
     //take contract_row deltas, store it in table_row_data
   }
 
-  void write_table_row(uint32_t block_num, std::vector<std::string> values)
+  void write_table_row(uint32_t const block_num, std::vector<std::string> values)
   {
     std::vector<std::string> table_row_values;
 
@@ -761,7 +772,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
     write_stream_custom(block_num, "table_rows", table_row_values);
   }
 
-  void receive_traces(uint32_t block_num, eosio::opaque<std::vector<eosio::ship_protocol::transaction_trace>> traces) {
+  void receive_traces(uint32_t const block_num, eosio::opaque<std::vector<eosio::ship_protocol::transaction_trace>> traces) {
     auto     bin = traces.get();
     uint32_t num;
     varuint32_from_bin(num, bin);
@@ -776,7 +787,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
   }
 
   void write_transaction_trace(
-                               uint32_t block_num, uint32_t& num_ordinals, const eosio::ship_protocol::transaction_trace& trace, eosio::input_stream trace_bin) {
+                               uint32_t const block_num, uint32_t& num_ordinals, const eosio::ship_protocol::transaction_trace& trace, eosio::input_stream trace_bin) {
     auto failed = std::visit(
                              [](auto& ttrace) { return !ttrace.failed_dtrx_trace.empty() ? &ttrace.failed_dtrx_trace[0].recurse : nullptr; }, trace);
     if (failed != nullptr) {

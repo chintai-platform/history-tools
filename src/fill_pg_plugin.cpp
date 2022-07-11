@@ -743,7 +743,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
     }
   }
 
-  void process_table_row_delta(uint32_t const block_num, std::to_string const &table_name, std::vector<std::string> values) {
+  void process_table_row_delta(uint32_t const block_num, std::string const &table_name, std::vector<std::string> values) {
     std::cout << "The delta values are: " << std::endl;
     for (int i=0; i < values.size(); ++i)
     {

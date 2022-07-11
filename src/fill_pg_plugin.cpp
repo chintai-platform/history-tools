@@ -725,13 +725,13 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
       t_delta);
   }
 
-  void process_deltas(uint32_t const block_num, table_delta &&t_delta, std::vector<std::string> values) {
-    if (table_name == "contract_row") {
+  void process_deltas(uint32_t const block_num, table_delta&& t_delta, std::vector<std::string> values) {
+    if (t_delta.name == "contract_row") {
       process_table_row_delta(block_num, t_delta, values);
     }
   }
 
-  void process_table_row_delta(uint32_t const block_num, table_delta &&t_delta, std::vector<std::string> values) {
+  void process_table_row_delta(uint32_t const block_num, table_delta&& t_delta, std::vector<std::string> values) {
     std::cout << "The delta values are: " << std::endl;
     for (int i=0; i < values.size(); ++i)
     {

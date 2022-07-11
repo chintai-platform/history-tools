@@ -718,25 +718,6 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
                else if (type.as_struct())
                converter.to_sql_values(row.data, *type.as_struct(), values);
                write_stream(block_num, t_delta.name, values);
-               process_deltas(block_num, t_delta, values);
-               ++num_processed;
-               }
-               },
-      t_delta);
-  }
-
-  void process_deltas(uint32_t const block_num, table_delta&& t_delta, std::vector<std::string> values) {
-    if (t_delta.name == "contract_row") {
-      process_table_row_delta(block_num, t_delta, values);
-    }
-  }
-
-  void process_table_row_delta(uint32_t const block_num, table_delta&& t_delta, std::vector<std::string> values) {
-    std::cout << "The delta values are: " << std::endl;
-    for (int i=0; i < values.size(); ++i)
-    {
-      std::cout << values.at(i) << std::endl;
-    } 
 
     for (int i=0; i < t_delta.rows.size(); ++i)
     {
@@ -746,8 +727,28 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
     std::string hex_data = hexStr(data, remaining_bytes);
   //  values.push_back(hex_data);
   //  delete[] data;
-    std::cout << "Row value " << std::to_string(i) << ": " << hex_data << std::endl;
+    std::cout << "Row data " << std::to_string(i) << ": " << hex_data << std::endl;
     }
+
+               process_deltas(block_num, t_delta.name, values);
+               ++num_processed;
+               }
+               },
+      t_delta);
+  }
+
+  void process_deltas(uint32_t const block_num, std::string const &table_name, std::vector<std::string> values) {
+    if (table_name == "contract_row") {
+      process_table_row_delta(block_num, table_name, values);
+    }
+  }
+
+  void process_table_row_delta(uint32_t const block_num, std::to_string const &table_name, std::vector<std::string> values) {
+    std::cout << "The delta values are: " << std::endl;
+    for (int i=0; i < values.size(); ++i)
+    {
+      std::cout << values.at(i) << std::endl;
+    } 
 
     //if (values.at(1) == "2")
     //{

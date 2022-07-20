@@ -12,7 +12,6 @@
 #include <pqxx/tablewriter>
 
 #include <nlohmann/json.hpp>
-#include <nlohmann/json.hpp>
 
 #include <abieos.h>
 
@@ -842,6 +841,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
             eosio::checksum256 const transaction_id,
             std::vector<eosio::ship_protocol::action_trace> const &action_traces)
     {
+	abieos_context* context = abieos_create();
         for (int i=0; i < action_traces.size(); ++i)
         {
             chintai_uint256_t xyz;
@@ -874,7 +874,6 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
             trace.act.data.read(data, remaining_bytes);
             std::string hex_data = hexStr(data, remaining_bytes);
             values.push_back(hex_data);
-	    std::cout << "Action data: " << data << std::endl;
             delete[] data;
             values.push_back(std::to_string(trace.context_free));
             values.push_back(trace.console);
@@ -883,10 +882,6 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
             values.insert(values.begin(), std::to_string(global_indexes.action_number));
 
             write_stream_custom(block_number, "actions", values);
-
-	    std::cout << "Action account: " << trace.act.account.to_string() << std::endl;
-	    std::cout << "Action name: " << trace.act.name.to_string() << std::endl;
-	    std::cout << "Hex string: " << hex_data << std::endl;
 
             write_action_data(block_number, trace.act.account.to_string(), trace.act.name.to_string(), hex_data);
         }

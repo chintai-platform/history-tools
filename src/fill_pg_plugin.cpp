@@ -12,6 +12,9 @@
 #include <pqxx/tablewriter>
 
 #include <nlohmann/json.hpp>
+#include <nlohmann/json.hpp>
+
+#include <abieos.h>
 
 using namespace appbase;
 using namespace eosio::ship_protocol;

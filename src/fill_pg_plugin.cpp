@@ -721,17 +721,6 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
                 converter.to_sql_values(row.data, *type.as_struct(), values);
                 write_stream(block_num, t_delta.name, values);
 
-                //    for (int i=0; i < t_delta.rows.size(); ++i)
-                //    {
-                //    size_t remaining_bytes = t_delta.rows.at(i).data.remaining();
-                //    unsigned char * data = new unsigned char[remaining_bytes];
-                //    t_delta.rows.at(i).data.read(data, remaining_bytes);
-                //    std::string hex_data = hexStr(data, remaining_bytes);
-                //  //  values.push_back(hex_data);
-                //  //  delete[] data;
-                //    std::cout << "Row hex data " << std::to_string(i) << ": " << hex_data << std::endl;
-                //    }
-
                 process_deltas(block_num, t_delta.name, values);
                 ++num_processed;
                 }
@@ -841,7 +830,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
             eosio::checksum256 const transaction_id,
             std::vector<eosio::ship_protocol::action_trace> const &action_traces)
     {
-	abieos_context* context = abieos_create();
+	auto context = abieos_create();
         for (int i=0; i < action_traces.size(); ++i)
         {
             chintai_uint256_t xyz;
@@ -855,9 +844,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
             eosio::ship_protocol::action_trace_v1 trace = std::get<1>(action_traces.at(i));
 
             if (trace.act.name.to_string() == "onblock" || 
-                    trace.act.name.to_string() == "setcode" || 
-                    trace.act.name.to_string() == "setabi" ||
-                    trace.act.account.to_string() == "eosio.null")
+                trace.act.account.to_string() == "eosio.null")
             {
                 continue;
             }
@@ -884,13 +871,25 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
             write_stream_custom(block_number, "actions", values);
 
             write_action_data(block_number, trace.act.account.to_string(), trace.act.name.to_string(), hex_data);
+
+	    if(trace.act.name.to_string() == "setabi")
+	    {
+		nlohmann::json json = get_json(trace.act.account.to_string(), trace.act.name.to_string(), hex_data);
+		const char* abi_hex;
+		for (auto itr = json.begin(); itr != json.end(); ++itr)
+		{
+	           if (itr.key() == "abi")
+		   {
+		      abi_hex = itr.value().dump().c_str();
+		   }
+		}
+
+		abieos_set_abi_hex(context, trace.act.account.value, abi_hex);
+	    }
         }
     } //write_action_traces
 
-    void write_action_data(uint32_t const block_number,
-            std::string const &action_account,
-            std::string const &action_name,
-            std::string const &action_data)
+    nlohmann::json get_json(std::string const &action_account, std::string const &action_name, std::string const &action_data)
     {
         std::string command = "/usr/bin/cleos -u http://192.168.12.185:8888 convert unpack_action_data " + action_account + " " + action_name + " " + action_data; 
 
@@ -899,9 +898,16 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
         std::string command_output = get_command_line_output(char_command);
         int exit_code = system(char_command);
 
-	std::cout << "json data: " << command_output << std::endl;
-
         nlohmann::json command_json = nlohmann::json::parse(command_output);
+	return command_json;
+    }
+
+    void write_action_data(uint32_t const block_number,
+            std::string const &action_account,
+            std::string const &action_name,
+            std::string const &action_data)
+    {
+	nlohmann::json command_json = get_json(action_account, action_name, action_data);
 
         for (auto itr = command_json.begin(); itr != command_json.end(); ++itr)
         {

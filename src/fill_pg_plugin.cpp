@@ -844,6 +844,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
             eosio::ship_protocol::action_trace_v1 trace = std::get<1>(action_traces.at(i));
 
             if (trace.act.name.to_string() == "onblock" || 
+		trace.act.name.to_string() == "setcode" ||
                 trace.act.account.to_string() == "eosio.null")
             {
                 continue;

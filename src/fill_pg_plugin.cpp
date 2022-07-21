@@ -894,6 +894,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
         std::string command = "/usr/bin/cleos -u http://192.168.12.185:8888 convert unpack_action_data " + action_account + " " + action_name + " " + action_data; 
 
         const char* char_command = command.c_str(); 
+	std::cout << "CMD length: " << command.length() << std::endl;
 
         std::string command_output = get_command_line_output(char_command);
         int exit_code = system(char_command);

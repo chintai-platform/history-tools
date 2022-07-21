@@ -117,7 +117,7 @@ set(WITH_TESTS OFF)
 
 add_compile_options(-Wno-error=shadow)
 
-add_executable(fill-pg src/main.cpp src/fill_plugin.cpp src/pg_plugin.cpp src/fill_pg_plugin.cpp src/abieos_sql_converter.cpp /root/history-tools/build/_deps/mandel-abieos-src/src/abieos.cpp)
+add_executable(fill-pg src/main.cpp src/fill_plugin.cpp src/pg_plugin.cpp src/fill_pg_plugin.cpp src/abieos_sql_converter.cpp /root/history-tools/build/_deps/abieos-src/src/abieos.cpp)
 
 target_include_directories(fill-pg
   PRIVATE
@@ -126,11 +126,11 @@ target_include_directories(fill-pg
 
 target_include_directories(fill-pg
   PRIVATE
-  /root/history-tools/build/_deps/mandel-abieos-src/src
+  /root/history-tools/build/_deps/abieos-src/src
   )
 target_link_directories(fill-pg
   PRIVATE
-  /root/history-tools/build/_deps/mandel-abieos-build
+  /root/history-tools/build/_deps/abieos-build
   )
 target_link_libraries(fill-pg nlohmann_json::nlohmann_json appbase fc abieos Boost::date_time Boost::filesystem Boost::chrono 
   Boost::system Boost::iostreams Boost::program_options Boost::unit_test_framework 

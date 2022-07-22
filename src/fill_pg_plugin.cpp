@@ -14,6 +14,7 @@
 #include <nlohmann/json.hpp>
 
 #include <abieos.h>
+#include <abieos.hpp>
 
 using namespace appbase;
 using namespace eosio::ship_protocol;
@@ -40,6 +41,15 @@ struct global_t {
     int64_t table_row_number = 0;
     int64_t table_row_data_number = 0;
 } global_indexes;
+
+struct abieos_context_s {
+    const char* last_error = "";
+    std::string last_error_buffer{};
+    std::string result_str{};
+    std::vector<char> result_bin{};
+
+    std::map<abieos::name, abieos::abi> contracts{};
+};
 
 /// a wrapper class for pqxx::work to log the SQL command sent to database
 struct work_t {
@@ -719,41 +729,78 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
                 converter.to_sql_values(row.data, t_delta.name, *type.as_variant(), values);
                 else if (type.as_struct())
                 converter.to_sql_values(row.data, *type.as_struct(), values);
-                write_stream(block_num, t_delta.name, values);
 
-                process_deltas(block_num, t_delta.name, values);
+                process_deltas(block_num, values);
                 ++num_processed;
                 }
                 },
             t_delta);
     }
 
-    void process_deltas(uint32_t const block_num, std::string const &table_name, std::vector<std::string> values) {
+    void process_deltas(uint32_t const block_num, std::vector<std::string> values) {
+	    std::string table_name = values.at(4);
         if (table_name == "contract_row") {
-            process_table_row_delta(block_num, table_name, values);
+            process_table_row_delta(block_num, values);
         }
     }
 
-    void process_table_row_delta(uint32_t const block_num, std::string const &table_name, std::vector<std::string> values) {
-        if (values.at(2) != "eosio")
-        {
-            std::cout << "The contract row delta values are: " << std::endl;
-            for (int i=0; i < values.size(); ++i)
-            {
-                std::cout << "## " << values.at(i) << std::endl;
-            } 
-        }
-
+    void process_table_row_delta(uint32_t const block_num, std::vector<std::string> values) {
+	uint64_t table_row_number(0);
         if (values.at(1) == "2")
         {
             write_table_row(block_num, values);
+	    table_row_number = global_indexes.table_row_number+1;
         }
-        if (values.at(2) != "eosio")
-        {
-	    std::cout << "!!!" << std::endl;
+	else
+	{
+	   // Use table row number from existing table row
+           work_t t(*sql_connection);
+	   std::string account = values.at(2);
+	   std::string scope = values.at(3);
+	   std::string table_name = values.at(4);
+	   auto table_row = t.exec("select data from chain.table_rows where account=" + account + " and scope=" + scope + " and table_name= " + table_name + " limit 1");
+	   
+	   table_row_number = table_row[0][0].as<uint64_t>();
 	}
 
-        //take contract_row deltas, store it in table_row_data
+	write_table_row_data(block_num, values, table_row_number);
+    }
+
+    void write_table_row_data(uint32_t const block_num, std::vector<std::string> values, uint64_t const table_row_number)
+    {
+        work_t t(*sql_connection);
+	auto context = abieos_create();
+
+	// make sure the abi is loaded into the context, add it if not
+	eosio::name contract = eosio::name{values.at(2)};
+	uint64_t contract_int = eosio::name{values.at(2)}.value;
+	auto contract_itr = context->contracts.find(::abieos::name{contract_int});
+	if (contract_itr == context->contracts.end())
+	{
+	   auto actions_row = t.exec("select data from chain.actions where account=" + contract.to_string() + " limit 1");
+	   
+	   std::string hex_data = actions_row[0][8].as<std::string>();
+	   set_abi_hex(contract, hex_data);
+	}
+
+	eosio::name table_name = eosio::name{values.at(4)};
+	const char* type = abieos_get_type_for_table(context, contract_int, table_name.value);
+	const char* hex = values.at(6).c_str();
+	
+	// decode the data and record it
+        const char* json_data = abieos_hex_to_json(context, contract_int, type, hex);
+        nlohmann::json json = nlohmann::json::parse(json_data);
+
+        for (auto itr = json.begin(); itr != json.end(); ++itr)
+        {
+        global_indexes.table_row_data_number++;
+        std::vector<std::string> table_row_data_values;
+        table_row_data_values.push_back(std::to_string(global_indexes.table_row_data_number));
+        table_row_data_values.push_back(std::to_string(table_row_number));
+        table_row_data_values.push_back(itr.key());
+        table_row_data_values.push_back(itr.value().dump());
+        write_stream_custom(block_num, "table_row_data", table_row_data_values);
+        }
     }
 
     void write_table_row(uint32_t const block_num, std::vector<std::string> values)
@@ -875,27 +922,32 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
 
 	    if(trace.act.name.to_string() == "setabi")
 	    {
-		nlohmann::json json = get_json(trace.act.account.to_string(), trace.act.name.to_string(), hex_data);
-		const char* abi_hex;
-		for (auto itr = json.begin(); itr != json.end(); ++itr)
-		{
-	           if (itr.key() == "abi")
-		   {
-		      abi_hex = itr.value().dump().c_str();
-		   }
-		}
-
-		abieos_set_abi_hex(context, trace.act.account.value, abi_hex);
+	      set_abi_hex(trace.act.account, hex_data);
 	    }
         }
     } //write_action_traces
+
+    void set_abi_hex(eosio::name const &account, std::string const &hex_data)
+    {
+	auto context = abieos_create();
+	nlohmann::json json = get_json(account.to_string(), "setabi", hex_data);
+	const char* abi_hex;
+	for (auto itr = json.begin(); itr != json.end(); ++itr)
+	{
+           if (itr.key() == "abi")
+	   {
+	      abi_hex = itr.value().dump().c_str();
+	   }
+	}
+
+        abieos_set_abi_hex(context, account.value, abi_hex);
+    }
 
     nlohmann::json get_json(std::string const &action_account, std::string const &action_name, std::string const &action_data)
     {
         std::string command = "/usr/bin/cleos -u http://192.168.12.185:8888 convert unpack_action_data " + action_account + " " + action_name + " " + action_data; 
 
         const char* char_command = command.c_str(); 
-	std::cout << "CMD length: " << command.length() << std::endl;
 
         std::string command_output = get_command_line_output(char_command);
         int exit_code = system(char_command);

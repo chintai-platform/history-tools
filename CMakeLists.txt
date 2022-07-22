@@ -117,7 +117,7 @@ set(WITH_TESTS OFF)
 
 add_compile_options(-Wno-error=shadow)
 
-add_executable(fill-pg src/main.cpp src/fill_plugin.cpp src/pg_plugin.cpp src/fill_pg_plugin.cpp src/abieos_sql_converter.cpp /root/history-tools/build/_deps/abieos-src/src/abieos.cpp)
+add_executable(fill-pg src/main.cpp src/fill_plugin.cpp src/pg_plugin.cpp src/fill_pg_plugin.cpp src/abieos_sql_converter.cpp /root/history-tools/build/_deps/abieos-src/src/abi.cpp /root/history-tools/build/_deps/abieos-src/src/abieos.cpp /root/history-tools/build/_deps/abieos-src/src/crypto.cpp /root/history-tools/build/_deps/abieos-src/src/fuzzer.cpp /root/history-tools/build/_deps/abieos-src/src/ship.abi.cpp) 
 
 target_include_directories(fill-pg
   PRIVATE

@@ -730,16 +730,15 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
                 else if (type.as_struct())
                 converter.to_sql_values(row.data, *type.as_struct(), values);
 
-                process_deltas(block_num, values);
+                process_deltas(block_num, values, t_delta.name);
                 ++num_processed;
                 }
                 },
             t_delta);
     }
 
-    void process_deltas(uint32_t const block_num, std::vector<std::string> values) {
-	    std::string table_name = values.at(4);
-        if (table_name == "contract_row") {
+    void process_deltas(uint32_t const block_num, std::vector<std::string> values, std::string const &delta_name) {
+        if (delta_name == "contract_row") {
             process_table_row_delta(block_num, values);
         }
     }
@@ -758,7 +757,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
 	   std::string account = values.at(2);
 	   std::string scope = values.at(3);
 	   std::string table_name = values.at(4);
-	   auto table_row = t.exec("select data from chain.table_rows where account=" + account + " and scope=" + scope + " and table_name= " + table_name + " limit 1");
+	   auto table_row = t.exec("select data from chain.table_rows where account = " + account + " and scope = " + scope + " and table_name = " + table_name + " limit 1");
 	   
 	   table_row_number = table_row[0][0].as<uint64_t>();
 	}
@@ -777,7 +776,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
 	auto contract_itr = context->contracts.find(::abieos::name{contract_int});
 	if (contract_itr == context->contracts.end())
 	{
-	   auto actions_row = t.exec("select data from chain.actions where account=" + contract.to_string() + " limit 1");
+	   auto actions_row = t.exec("select data from chain.actions where account = " + contract.to_string() + " limit 1");
 	   
 	   std::string hex_data = actions_row[0][8].as<std::string>();
 	   set_abi_hex(contract, hex_data);
@@ -945,7 +944,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
 
     nlohmann::json get_json(std::string const &action_account, std::string const &action_name, std::string const &action_data)
     {
-        std::string command = "/usr/bin/cleos -u http://192.168.12.185:8888 convert unpack_action_data " + action_account + " " + action_name + " " + action_data; 
+        std::string command = "/usr/bin/cleos -u http://192.168.0.69:8888 convert unpack_action_data " + action_account + " " + action_name + " " + action_data; 
 
         const char* char_command = command.c_str(); 
 

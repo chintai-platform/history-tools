@@ -42,6 +42,7 @@ struct global_t {
     int64_t table_row_data_number = 0;
 } global_indexes;
 
+/// define abieos context, storing abis for table row delta decoding
 struct abieos_context_s {
     const char* last_error = "";
     std::string last_error_buffer{};
@@ -67,6 +68,20 @@ struct work_t {
 
     auto quote_name(const std::string& str) { return w.quote_name(str); }
 };
+
+/// connection struct to initalize and access the SQL connection from everywhere
+// struct connection {
+//   work_t t;
+//   work_t* get_connection() 
+//   {
+//     if (t == NULL)
+//     {
+//       work_t link(*sql_connection);
+//       t = link;
+//     }
+//     return t;
+//   }
+// }
 
 /// a wrapper class for pqxx::pipeline to log the SQL command sent to database
 struct pipeline_t {
@@ -513,6 +528,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
 
     template <typename GetBlockResult, typename HandleBlocksTracesDelta>
         bool process_blocks_result(GetBlockResult& result, HandleBlocksTracesDelta&& handler) {
+		std::cout << "inside process blocks result" << std::endl;
             if (!result.this_block)
                 return true;
             bool bulk         = result.this_block->block_num + 4 < result.last_irreversible.block_num;
@@ -583,6 +599,9 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
 
     bool received(get_blocks_result_v2& result) override {
         return process_blocks_result(result, [this,&result](bool bulk) {
+			std::cout << "before receive block" << std::endl;
+			work_t t(*sql_connection);
+			std::cout << "after receive received connection" << std::endl;
                 if (!result.block_header.empty())
                 receive_block(result.this_block->block_num, result.this_block->block_id, result.block_header);
                 if (!result.deltas.empty())
@@ -686,6 +705,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
     }
 
     void receive_block(uint32_t block_num, const eosio::checksum256& block_id, const eosio::opaque<signed_block_header>& opq) {
+	    std::cout << "receive block" << std::endl;
         auto&                    abi_type = get_type("signed_block_header");
         std::vector<std::string> values{std::to_string(block_num), sql_str(block_id)};
         auto                     bin = opq.get();
@@ -703,7 +723,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
     void receive_deltas(uint32_t block_num, eosio::opaque<std::vector<eosio::ship_protocol::table_delta>> delta, bool bulk) {
         for_each(delta, [ this, block_num, bulk ](auto t_delta){
                 std::string table_name = std::get<1>(t_delta).name;
-                if (table_name == "account" || table_name == "contract_row" || table_name == "contract_table")
+                if (table_name == "contract_row")
                 {
                 write_table_delta(block_num, std::move(t_delta), bulk);
                 }
@@ -730,28 +750,26 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
                 else if (type.as_struct())
                 converter.to_sql_values(row.data, *type.as_struct(), values);
 
-                process_deltas(block_num, values, t_delta.name);
+                process_table_row_delta(block_num, values);
                 ++num_processed;
                 }
                 },
             t_delta);
     }
 
-    void process_deltas(uint32_t const block_num, std::vector<std::string> values, std::string const &delta_name) {
-        if (delta_name == "contract_row") {
-            process_table_row_delta(block_num, values);
-        }
-    }
-
     void process_table_row_delta(uint32_t const block_num, std::vector<std::string> values) {
 	uint64_t table_row_number(0);
+	std::cout << "#########" << std::endl;
+	std::cout << "process table row delta" << std::endl;
         if (values.at(1) == "2")
         {
+		std::cout << "new table row" << std::endl;
             write_table_row(block_num, values);
 	    table_row_number = global_indexes.table_row_number+1;
         }
 	else
 	{
+		std::cout << "existing table row" << std::endl;
 	   // Use table row number from existing table row
            work_t t(*sql_connection);
 	   std::string account = values.at(2);
@@ -767,7 +785,9 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
 
     void write_table_row_data(uint32_t const block_num, std::vector<std::string> values, uint64_t const table_row_number)
     {
+	    std::cout << "write table row delta" << std::endl;
         work_t t(*sql_connection);
+	std::cout << "after write table row connection" << std::endl;
 	auto context = abieos_create();
 
 	// make sure the abi is loaded into the context, add it if not
@@ -804,6 +824,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
 
     void write_table_row(uint32_t const block_num, std::vector<std::string> values)
     {
+	    std::cout << "write table row" << std::endl;
         std::vector<std::string> table_row_values;
 
         global_indexes.table_row_number++;
@@ -944,7 +965,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
 
     nlohmann::json get_json(std::string const &action_account, std::string const &action_name, std::string const &action_data)
     {
-        std::string command = "/usr/bin/cleos -u http://192.168.0.69:8888 convert unpack_action_data " + action_account + " " + action_name + " " + action_data; 
+        std::string command = "/usr/bin/cleos -u http://192.168.12.185:8888 convert unpack_action_data " + action_account + " " + action_name + " " + action_data; 
 
         const char* char_command = command.c_str(); 
 
@@ -1044,6 +1065,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
 
     ~fpg_session() {}
 }; // fpg_session
+
 
 static abstract_plugin& _fill_postgresql_plugin = app().register_plugin<fill_pg_plugin>();
 

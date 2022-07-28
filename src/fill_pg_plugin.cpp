@@ -750,7 +750,6 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
                 process_table_row_delta(block_num, values);
                 ++num_processed;
                 }
-		t.commit();
                 },
             t_delta);
     }

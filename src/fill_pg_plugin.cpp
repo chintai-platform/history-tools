@@ -599,9 +599,6 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
 
     bool received(get_blocks_result_v2& result) override {
         return process_blocks_result(result, [this,&result](bool bulk) {
-			std::cout << "before receive block" << std::endl;
-			work_t t(*sql_connection);
-			std::cout << "after receive received connection" << std::endl;
                 if (!result.block_header.empty())
                 receive_block(result.this_block->block_num, result.this_block->block_id, result.block_header);
                 if (!result.deltas.empty())
@@ -753,6 +750,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
                 process_table_row_delta(block_num, values);
                 ++num_processed;
                 }
+		t.commit();
                 },
             t_delta);
     }
@@ -761,6 +759,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
 	uint64_t table_row_number(0);
 	std::cout << "#########" << std::endl;
 	std::cout << "process table row delta" << std::endl;
+	work_t t(*sql_connection);
         if (values.at(1) == "2")
         {
 		std::cout << "new table row" << std::endl;
@@ -771,7 +770,6 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
 	{
 		std::cout << "existing table row" << std::endl;
 	   // Use table row number from existing table row
-           work_t t(*sql_connection);
 	   std::string account = values.at(2);
 	   std::string scope = values.at(3);
 	   std::string table_name = values.at(4);
@@ -780,13 +778,12 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
 	   table_row_number = table_row[0][0].as<uint64_t>();
 	}
 
-	write_table_row_data(block_num, values, table_row_number);
+	write_table_row_data(block_num, values, table_row_number, t);
     }
 
-    void write_table_row_data(uint32_t const block_num, std::vector<std::string> values, uint64_t const table_row_number)
+    void write_table_row_data(uint32_t const block_num, std::vector<std::string> values, uint64_t const table_row_number, work_t &t)
     {
 	    std::cout << "write table row delta" << std::endl;
-        work_t t(*sql_connection);
 	std::cout << "after write table row connection" << std::endl;
 	auto context = abieos_create();
 
@@ -795,12 +792,18 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
 	uint64_t contract_int = eosio::name{values.at(2)}.value;
 	auto contract_itr = context->contracts.find(::abieos::name{contract_int});
 	if (contract_itr == context->contracts.end())
-	{
+  	{
+		std::cout << "before connection" << std::endl;
+           // work_t t(*sql_connection);
+           std::cout << "select data from chain.actions where account = " + contract.to_string() + " limit 1" << std::endl;
 	   auto actions_row = t.exec("select data from chain.actions where account = " + contract.to_string() + " limit 1");
+
 	   
 	   std::string hex_data = actions_row[0][8].as<std::string>();
+	   std::cout << "hex data: " << hex_data << std::endl;
 	   set_abi_hex(contract, hex_data);
 	}
+	std::cout << "after brace" << std::endl;
 
 	eosio::name table_name = eosio::name{values.at(4)};
 	const char* type = abieos_get_type_for_table(context, contract_int, table_name.value);

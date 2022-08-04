@@ -528,7 +528,6 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
 
     template <typename GetBlockResult, typename HandleBlocksTracesDelta>
         bool process_blocks_result(GetBlockResult& result, HandleBlocksTracesDelta&& handler) {
-		std::cout << "inside process blocks result" << std::endl;
             if (!result.this_block)
                 return true;
             bool bulk         = result.this_block->block_num + 4 < result.last_irreversible.block_num;
@@ -601,10 +600,10 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
         return process_blocks_result(result, [this,&result](bool bulk) {
                 if (!result.block_header.empty())
                 receive_block(result.this_block->block_num, result.this_block->block_id, result.block_header);
-                if (!result.deltas.empty())
-                receive_deltas(result.this_block->block_num, result.deltas, bulk);
                 if (!result.traces.empty())
                 receive_traces(result.this_block->block_num, result.traces);
+                if (!result.deltas.empty())
+                receive_deltas(result.this_block->block_num, result.deltas, bulk);
                 });
     }
 
@@ -702,7 +701,6 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
     }
 
     void receive_block(uint32_t block_num, const eosio::checksum256& block_id, const eosio::opaque<signed_block_header>& opq) {
-	    std::cout << "receive block" << std::endl;
         auto&                    abi_type = get_type("signed_block_header");
         std::vector<std::string> values{std::to_string(block_num), sql_str(block_id)};
         auto                     bin = opq.get();
@@ -747,18 +745,22 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
                 else if (type.as_struct())
                 converter.to_sql_values(row.data, *type.as_struct(), values);
 
-                process_table_row_delta(block_num, values);
+		std::string account = values.at(2);
+		if (account != "eosio" && account != "eosio.token")
+		{
+                  process_table_row_delta(block_num, values);
+		}
                 ++num_processed;
                 }
                 },
             t_delta);
     }
 
-    void process_table_row_delta(uint32_t const block_num, std::vector<std::string> values) {
+    void process_table_row_delta(uint32_t const block_num, std::vector<std::string> values) 
+    {
+	    std::cout << "account name: " << values.at(2) << std::endl;
+	    std::cout << "process table row delta" << std::endl;
 	uint64_t table_row_number(0);
-	std::cout << "#########" << std::endl;
-	std::cout << "process table row delta" << std::endl;
-	work_t t(*sql_connection);
         if (values.at(1) == "2")
         {
 		std::cout << "new table row" << std::endl;
@@ -767,23 +769,26 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
         }
 	else
 	{
-		std::cout << "existing table row" << std::endl;
+	        std::cout << "Existing table row" << std::endl;
 	   // Use table row number from existing table row
 	   std::string account = values.at(2);
 	   std::string scope = values.at(3);
 	   std::string table_name = values.at(4);
-	   auto table_row = t.exec("select data from chain.table_rows where account = " + account + " and scope = " + scope + " and table_name = " + table_name + " limit 1");
+
+           std::string command = "/usr/bin/psql -U postgres -h 172.17.0.3 -c 'select table_row_number from chain.table_rows where account = " + account + " and scope = " + scope + " and table_name = " + table_name + " limit 1'"; 
+           std::string command_output = get_command_line_output(command);
+
+	   std::cout << command_output << std::endl;
 	   
-	   table_row_number = table_row[0][0].as<uint64_t>();
+	   //table_row_number = table_row[0][0].as<uint64_t>();
 	}
 
-	write_table_row_data(block_num, values, table_row_number, t);
+	write_table_row_data(block_num, values, table_row_number);
     }
 
-    void write_table_row_data(uint32_t const block_num, std::vector<std::string> values, uint64_t const table_row_number, work_t &t)
+    void write_table_row_data(uint32_t const block_num, std::vector<std::string> values, uint64_t const table_row_number)
     {
-	    std::cout << "write table row delta" << std::endl;
-	std::cout << "after write table row connection" << std::endl;
+	    std::cout << "write table row data" << std::endl;
 	auto context = abieos_create();
 
 	// make sure the abi is loaded into the context, add it if not
@@ -792,17 +797,16 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
 	auto contract_itr = context->contracts.find(::abieos::name{contract_int});
 	if (contract_itr == context->contracts.end())
   	{
-		std::cout << "before connection" << std::endl;
-           // work_t t(*sql_connection);
-           std::cout << "select data from chain.actions where account = " + contract.to_string() + " limit 1" << std::endl;
-	   auto actions_row = t.exec("select data from chain.actions where account = " + contract.to_string() + " limit 1");
+           std::string command = "/usr/bin/psql -U postgres -h 172.17.0.3 -c 'select action_data from chain.actions where action_account = " + contract.to_string() + " and action_name = setabi limit 1'"; 
+           std::string command_output = get_command_line_output(command);
 
-	   
-	   std::string hex_data = actions_row[0][8].as<std::string>();
-	   std::cout << "hex data: " << hex_data << std::endl;
-	   set_abi_hex(contract, hex_data);
+	   std::cout << "Abi not loaded into context" << std::endl;
+	   std::cout << command_output << std::endl;
+
+//	   std::string hex_data = actions_row[0][8].as<std::string>();
+//	   std::cout << "hex data: " << hex_data << std::endl;
+//	   set_abi_hex(contract, hex_data);
 	}
-	std::cout << "after brace" << std::endl;
 
 	eosio::name table_name = eosio::name{values.at(4)};
 	const char* type = abieos_get_type_for_table(context, contract_int, table_name.value);
@@ -941,38 +945,32 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
             write_stream_custom(block_number, "actions", values);
 
             write_action_data(block_number, trace.act.account.to_string(), trace.act.name.to_string(), hex_data);
-
-	    if(trace.act.name.to_string() == "setabi")
-	    {
-	      set_abi_hex(trace.act.account, hex_data);
-	    }
         }
     } //write_action_traces
 
     void set_abi_hex(eosio::name const &account, std::string const &hex_data)
     {
 	auto context = abieos_create();
+	std::cout << "2" << std::endl;
 	nlohmann::json json = get_json(account.to_string(), "setabi", hex_data);
-	const char* abi_hex;
+	std::string abi_hex;
 	for (auto itr = json.begin(); itr != json.end(); ++itr)
 	{
            if (itr.key() == "abi")
 	   {
 	      abi_hex = itr.value().dump().c_str();
+	      abi_hex.erase(remove(abi_hex.begin(), abi_hex.end(), '"'), abi_hex.end());
 	   }
 	}
 
-        abieos_set_abi_hex(context, account.value, abi_hex);
+	std::cout << "before set abi hex" << std::endl;
+        abieos_set_abi_hex(context, account.value, abi_hex.c_str());
     }
 
     nlohmann::json get_json(std::string const &action_account, std::string const &action_name, std::string const &action_data)
     {
         std::string command = "/usr/bin/cleos -u http://192.168.12.185:8888 convert unpack_action_data " + action_account + " " + action_name + " " + action_data; 
-
-        const char* char_command = command.c_str(); 
-
-        std::string command_output = get_command_line_output(char_command);
-        int exit_code = system(char_command);
+        std::string command_output = get_command_line_output(command);
 
         nlohmann::json command_json = nlohmann::json::parse(command_output);
 	return command_json;
@@ -996,12 +994,28 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
             values.push_back(itr.value().dump());
             write_stream_custom(block_number, "action_data", values);
         }
+
+	if(action_name == "setabi")
+	{
+	  std::string account;
+          for (auto itr = command_json.begin(); itr != command_json.end(); ++itr)
+	  {
+	    if (itr.key() == "account")
+	    {
+              account = itr.value();
+	    }
+	  }
+	  set_abi_hex(eosio::name{account}, action_data);
+	}
     } //write_action_data
 
-    std::string get_command_line_output(const char* cmd) {
+    std::string get_command_line_output(std::string command) {
+        const char* char_command = command.c_str(); 
+	//TODO use the exit code to determine whether there was an error
+        int exit_code = system(char_command);
         std::array<char, 128> buffer;
         std::string result;
-        std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(cmd, "r"), pclose);
+        std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(char_command, "r"), pclose);
         if (!pipe) {
             throw std::runtime_error("popen() failed!");
         }

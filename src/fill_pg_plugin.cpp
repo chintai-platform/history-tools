@@ -951,8 +951,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
     void set_abi_hex(eosio::name const &account, std::string const &hex_data)
     {
 	auto context = abieos_create();
-	std::cout << "2" << std::endl;
-	nlohmann::json json = get_json(account.to_string(), "setabi", hex_data);
+	nlohmann::json json = get_json("eosio", "setabi", hex_data);
 	std::string abi_hex;
 	for (auto itr = json.begin(); itr != json.end(); ++itr)
 	{
@@ -964,7 +963,14 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
 	}
 
 	std::cout << "before set abi hex" << std::endl;
+	std::cout << "Contracts loaded onto context: " << context->contracts.size() << std::endl;
         abieos_set_abi_hex(context, account.value, abi_hex.c_str());
+	std::cout << "after set abi hex" << std::endl;
+	std::cout << "Contracts loaded onto context: " << context->contracts.size() << std::endl;
+       	for (auto const& element : context->contracts)
+        {
+            std::cout << "Contract name: " << element.first.to_string() << std::endl;
+        }
     }
 
     nlohmann::json get_json(std::string const &action_account, std::string const &action_name, std::string const &action_data)

@@ -52,6 +52,15 @@ struct abieos_context_s {
     std::map<abieos::name, abieos::abi> contracts{};
 };
 
+/// create singleton of abieos context
+abieos_context * my_abieos_context = nullptr;
+abieos_context* get_abieos_context(){
+  if(my_abieos_context  == nullptr){
+    my_abieos_context = abieos_create();
+  }
+  return my_abieos_context;
+}
+
 /// a wrapper class for pqxx::work to log the SQL command sent to database
 struct work_t {
     pqxx::work w;
@@ -758,29 +767,28 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
 
     void process_table_row_delta(uint32_t const block_num, std::vector<std::string> values) 
     {
-	    std::cout << "account name: " << values.at(2) << std::endl;
 	    std::cout << "process table row delta" << std::endl;
 	uint64_t table_row_number(0);
         if (values.at(1) == "2")
         {
-		std::cout << "new table row" << std::endl;
-            write_table_row(block_num, values);
-	    table_row_number = global_indexes.table_row_number+1;
+          std::cout << "new table row" << std::endl;
+           write_table_row(block_num, values);
+	   table_row_number = global_indexes.table_row_number+1;
         }
 	else
 	{
-	        std::cout << "Existing table row" << std::endl;
-	   // Use table row number from existing table row
-	   std::string account = values.at(2);
-	   std::string scope = values.at(3);
-	   std::string table_name = values.at(4);
+	  std::cout << "Existing table row" << std::endl;
+	  // Use table row number from existing table row
+	  std::string account = values.at(2);
+	  std::string scope = values.at(3);
+	  std::string table_name = values.at(4);
 
-           std::string command = "/usr/bin/psql -U postgres -h 172.17.0.3 -c 'select table_row_number from chain.table_rows where account = " + account + " and scope = " + scope + " and table_name = " + table_name + " limit 1'"; 
-           std::string command_output = get_command_line_output(command);
+          std::string command = "/usr/bin/psql -U postgres -h 172.17.0.3 -c 'select table_row_number from chain.table_rows where account = " + account + " and scope = " + scope + " and table_name = " + table_name + " limit 1'"; 
+          std::string command_output = get_command_line_output(command);
 
-	   std::cout << command_output << std::endl;
+	  std::cout << command_output << std::endl;
 	   
-	   //table_row_number = table_row[0][0].as<uint64_t>();
+	  //table_row_number = table_row[0][0].as<uint64_t>();
 	}
 
 	write_table_row_data(block_num, values, table_row_number);
@@ -789,7 +797,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
     void write_table_row_data(uint32_t const block_num, std::vector<std::string> values, uint64_t const table_row_number)
     {
 	    std::cout << "write table row data" << std::endl;
-	auto context = abieos_create();
+	auto context = get_abieos_context();
 
 	// make sure the abi is loaded into the context, add it if not
 	eosio::name contract = eosio::name{values.at(2)};
@@ -810,11 +818,13 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
 
 	eosio::name table_name = eosio::name{values.at(4)};
 	const char* type = abieos_get_type_for_table(context, contract_int, table_name.value);
-	const char* hex = values.at(6).c_str();
+	std::string hex = values.at(7);
+	hex.erase(0,3); // delete the //x characters at beginning of string
 	
 	// decode the data and record it
-        const char* json_data = abieos_hex_to_json(context, contract_int, type, hex);
+        const char* json_data = abieos_hex_to_json(context, contract_int, type, hex.c_str());
         nlohmann::json json = nlohmann::json::parse(json_data);
+	std::cout << "8" << std::endl;
 
         for (auto itr = json.begin(); itr != json.end(); ++itr)
         {
@@ -903,7 +913,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
             eosio::checksum256 const transaction_id,
             std::vector<eosio::ship_protocol::action_trace> const &action_traces)
     {
-	auto context = abieos_create();
+	auto context = get_abieos_context();
         for (int i=0; i < action_traces.size(); ++i)
         {
             chintai_uint256_t xyz;
@@ -950,7 +960,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
 
     void set_abi_hex(eosio::name const &account, std::string const &hex_data)
     {
-	auto context = abieos_create();
+	auto context = get_abieos_context();
 	nlohmann::json json = get_json("eosio", "setabi", hex_data);
 	std::string abi_hex;
 	for (auto itr = json.begin(); itr != json.end(); ++itr)

@@ -340,10 +340,10 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
 
         t.exec("create table " + converter.schema_name + ".blocks " + R"((block_number BIGINT CONSTRAINT block_info_pk PRIMARY KEY, block_id varchar(64), timestamp TIMESTAMP, previous varchar(64), transaction_mroot varchar(64), action_mroot varchar(64), producer_signature varchar))");
         t.exec("create table " + converter.schema_name + ".transactions " + R"((transaction_number BIGINT PRIMARY KEY, block_number BIGINT, transaction_ordinal INT, id varchar(64), status varchar))");
-        t.exec("create table " + converter.schema_name + ".actions " + R"((action_number BIGINT PRIMARY KEY, transaction_id TEXT, action_ordinal INT, creator_action_ordinal INT, receiver varchar(12), action_account varchar(12), action_name varchar(12), action_permission TEXT, action_data TEXT, context_free BOOL, console TEXT))");
+        t.exec("create table " + converter.schema_name + ".actions " + R"((action_number BIGINT PRIMARY KEY, transaction_number BIGINT, action_ordinal INT, creator_action_ordinal INT, receiver varchar(12), action_account varchar(12), action_name varchar(12), action_permission TEXT, context_free BOOL, console TEXT))");
         t.exec("create table " + converter.schema_name + ".action_data " + R"((action_data_number BIGINT PRIMARY KEY, action_number BIGINT, key TEXT, value TEXT))");
-        t.exec("create table " + converter.schema_name + ".table_rows " + R"((table_row_number BIGINT PRIMARY KEY, block_number BIGINT, account TEXT, scope TEXT, table_name TEXT, primary_key TEXT))");
-        t.exec("create table " + converter.schema_name + ".table_row_data " + R"((table_row_data_number BIGINT PRIMARY KEY, table_row_number BIGINT, key TEXT, value TEXT))");
+        t.exec("create table " + converter.schema_name + ".table_rows " + R"((table_row_number BIGINT PRIMARY KEY, account TEXT, scope TEXT, table_name TEXT, primary_key TEXT))");
+        t.exec("create table " + converter.schema_name + ".table_row_data " + R"((table_row_data_number BIGINT PRIMARY KEY, table_row_number BIGINT, block_number BIGINT, key TEXT, value TEXT))");
 
         for (auto& table : connection->abi.tables) {
             std::vector<std::string> keys = {"block_num", "present"};
@@ -666,7 +666,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
             }
             else if (name == "actions")
             {
-                columns = {"action_number", "transaction_id", "action_ordinal", "creator_action_ordinal", "receiver", "action_account", "action_name", "action_permission", "action_data", "context_free", "console"};
+                columns = {"action_number", "transaction_number", "action_ordinal", "creator_action_ordinal", "receiver", "action_account", "action_name", "action_permission", "context_free", "console"};
             }
             else if (name == "action_data")
             {
@@ -674,11 +674,11 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
             }
             else if (name == "table_rows")
             {
-                columns = {"table_row_number", "block_number", "account", "scope", "table_name", "primary_key"};
+                columns = {"table_row_number", "account", "scope", "table_name", "primary_key"};
             }
             else if (name == "table_row_data")
             {
-                columns = {"table_row_data_number", "table_row_number", "key", "value"};
+                columns = {"table_row_data_number", "table_row_number", "block_number", "key", "value"};
             }
 
             ts = std::make_unique<table_stream>(converter.schema_name + "." + quote_name(name), columns);
@@ -767,13 +767,11 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
 
     void process_table_row_delta(uint32_t const block_num, std::vector<std::string> values) 
     {
-	    std::cout << "process table row delta" << std::endl;
 	uint64_t table_row_number(0);
         if (values.at(1) == "2")
         {
-          std::cout << "new table row" << std::endl;
            write_table_row(block_num, values);
-	   table_row_number = global_indexes.table_row_number+1;
+	   table_row_number = global_indexes.table_row_number;
         }
 	else
 	{
@@ -796,7 +794,6 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
 
     void write_table_row_data(uint32_t const block_num, std::vector<std::string> values, uint64_t const table_row_number)
     {
-	    std::cout << "write table row data" << std::endl;
 	auto context = get_abieos_context();
 
 	// make sure the abi is loaded into the context, add it if not
@@ -824,7 +821,6 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
 	// decode the data and record it
         const char* json_data = abieos_hex_to_json(context, contract_int, type, hex.c_str());
         nlohmann::json json = nlohmann::json::parse(json_data);
-	std::cout << "8" << std::endl;
 
         for (auto itr = json.begin(); itr != json.end(); ++itr)
         {
@@ -832,6 +828,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
         std::vector<std::string> table_row_data_values;
         table_row_data_values.push_back(std::to_string(global_indexes.table_row_data_number));
         table_row_data_values.push_back(std::to_string(table_row_number));
+	table_row_data_values.push_back(std::to_string(block_num));
         table_row_data_values.push_back(itr.key());
         table_row_data_values.push_back(itr.value().dump());
         write_stream_custom(block_num, "table_row_data", table_row_data_values);
@@ -840,13 +837,12 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
 
     void write_table_row(uint32_t const block_num, std::vector<std::string> values)
     {
-	    std::cout << "write table row" << std::endl;
+	    //TODO - Check here for duplicate data
         std::vector<std::string> table_row_values;
 
         global_indexes.table_row_number++;
         table_row_values.push_back(std::to_string(global_indexes.table_row_number));
         table_row_values.push_back(values.at(0));
-        table_row_values.push_back(values.at(2));
         table_row_values.push_back(values.at(3));
         table_row_values.push_back(values.at(4));
         table_row_values.push_back(values.at(5));
@@ -879,7 +875,6 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
             write_transaction_trace(block_num, num_ordinals, *failed, eosio::input_stream{data});
         }
 
-        write_action_traces(block_num, std::get<0>(trace).id, std::get<0>(trace).action_traces);
 
         auto                     transaction_ordinal = ++num_ordinals;
         std::vector<std::string> values{std::to_string(block_num), std::to_string(transaction_ordinal)};
@@ -902,6 +897,8 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
         values.insert(values.begin(), std::to_string(global_indexes.transaction_number));
 
         write_stream_custom(block_num, "transactions", values);
+
+        write_action_traces(block_num, std::get<0>(trace).id, std::get<0>(trace).action_traces);
     } // write_transaction_trace
 
     struct chintai_uint256_t
@@ -916,14 +913,13 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
 	auto context = get_abieos_context();
         for (int i=0; i < action_traces.size(); ++i)
         {
-            chintai_uint256_t xyz;
-            memcpy(&xyz, &transaction_id, 32);
-            char hexstring[65];  // needs to be at least 64 hex digits + 1 for the null terminator
-            sprintf(hexstring, "%016llx%016llx%016llx%016llx", xyz.bits[3], xyz.bits[2], xyz.bits[1], xyz.bits[0]);
-            char trx_id[32];
-            memcpy(trx_id, &transaction_id, 32);
-            std::vector<std::string> values{};
-            values.push_back(std::string(hexstring));
+          //  chintai_uint256_t xyz;
+          //  memcpy(&xyz, &transaction_id, 32);
+          //  char hexstring[65];  // needs to be at least 64 hex digits + 1 for the null terminator
+          //  sprintf(hexstring, "%016llx%016llx%016llx%016llx", xyz.bits[3], xyz.bits[2], xyz.bits[1], xyz.bits[0]);
+          //  char trx_id[32];
+          //  memcpy(trx_id, &transaction_id, 32);
+          //  values.push_back(std::string(hexstring));
             eosio::ship_protocol::action_trace_v1 trace = std::get<1>(action_traces.at(i));
 
             if (trace.act.name.to_string() == "onblock" || 
@@ -933,6 +929,10 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
                 continue;
             }
 
+            std::vector<std::string> values{};
+            global_indexes.action_number++;
+            values.push_back(std::to_string(global_indexes.action_number));
+            values.push_back(std::to_string(global_indexes.transaction_number));
             values.push_back(std::to_string(uint32_t(trace.action_ordinal)));
             values.push_back(std::to_string(uint32_t(trace.creator_action_ordinal)));
             values.push_back(trace.receiver.to_string());
@@ -944,13 +944,9 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
             unsigned char * data = new unsigned char[remaining_bytes];
             trace.act.data.read(data, remaining_bytes);
             std::string hex_data = hexStr(data, remaining_bytes);
-            values.push_back(hex_data);
             delete[] data;
             values.push_back(std::to_string(trace.context_free));
             values.push_back(trace.console);
-
-            global_indexes.action_number++;
-            values.insert(values.begin(), std::to_string(global_indexes.action_number));
 
             write_stream_custom(block_number, "actions", values);
 
@@ -972,15 +968,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
 	   }
 	}
 
-	std::cout << "before set abi hex" << std::endl;
-	std::cout << "Contracts loaded onto context: " << context->contracts.size() << std::endl;
         abieos_set_abi_hex(context, account.value, abi_hex.c_str());
-	std::cout << "after set abi hex" << std::endl;
-	std::cout << "Contracts loaded onto context: " << context->contracts.size() << std::endl;
-       	for (auto const& element : context->contracts)
-        {
-            std::cout << "Contract name: " << element.first.to_string() << std::endl;
-        }
     }
 
     nlohmann::json get_json(std::string const &action_account, std::string const &action_name, std::string const &action_data)
@@ -1027,7 +1015,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
 
     std::string get_command_line_output(std::string command) {
         const char* char_command = command.c_str(); 
-	//TODO use the exit code to determine whether there was an error
+	//TODO use the exit code to determine if there was an error
         int exit_code = system(char_command);
         std::array<char, 128> buffer;
         std::string result;

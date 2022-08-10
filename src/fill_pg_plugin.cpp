@@ -806,6 +806,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
         }
 	else
 	{
+		//TODO Make sure the table row number is recorded accurately
 	  std::cout << "Existing table row" << std::endl;
 	  // Use table row number from existing table row
 	  std::string account = values.at(2);

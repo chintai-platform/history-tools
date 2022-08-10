@@ -266,6 +266,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
             config->create_schema = false;
         }
         else if (global_indexes.transaction_number == 0) {
+		try {
             work_t t(*sql_connection);
             auto transaction_number = t.exec("select transaction_number from chain.transactions order by transaction_number desc limit 1");
             auto action_number = t.exec("select action_number from chain.actions order by action_number desc limit 1");
@@ -297,6 +298,10 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
             } else {
                 global_indexes.table_row_data_number = 0;
             }
+		}
+		catch (...) {
+			std::cout << "Setting the global index numbers failed" << std::endl;
+		}
 
         }
         connection->send(get_status_request_v0{});
@@ -316,6 +321,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
     }
 
     void create_tables() {
+	    try {
         work_t t(*sql_connection);
 
         ilog("create schema ${s}", ("s", converter.schema_name));
@@ -352,6 +358,10 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
         }
 
         t.commit();
+	    }
+	    catch (...) {
+		    std::cout << "Create tables failed" << std::endl;
+	    }
     } // create_tables()
 
     void create_trim() {
@@ -655,6 +665,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
     }
 
     void write_stream_custom(uint32_t block_num, const std::string& name, const std::vector<std::string>& values) {
+	    try {
         if (!first_bulk)
             first_bulk = block_num;
         auto& ts = table_streams[name];
@@ -684,6 +695,10 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
             ts = std::make_unique<table_stream>(converter.schema_name + "." + quote_name(name), columns);
         }
         ts->writer.write_raw_line(boost::algorithm::join(values, "\t"));
+	    }
+	    catch (...) {
+		    std::cout << "write stream custom failed" << std::endl;
+	    }
     }
 
     void flush_streams() {
@@ -710,6 +725,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
     }
 
     void receive_block(uint32_t block_num, const eosio::checksum256& block_id, const eosio::opaque<signed_block_header>& opq) {
+	    try {
         auto&                    abi_type = get_type("signed_block_header");
         std::vector<std::string> values{std::to_string(block_num), sql_str(block_id)};
         auto                     bin = opq.get();
@@ -722,9 +738,14 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
         values.erase(values.begin()+3);
 
         write_stream(block_num, "blocks", values);
+	    }
+	    catch (...) {
+		    std::cout << "receive block failed" << std::endl;
+	    }
     }
 
     void receive_deltas(uint32_t block_num, eosio::opaque<std::vector<eosio::ship_protocol::table_delta>> delta, bool bulk) {
+	    try {
         for_each(delta, [ this, block_num, bulk ](auto t_delta){
                 std::string table_name = std::get<1>(t_delta).name;
                 if (table_name == "contract_row")
@@ -732,9 +753,14 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
                 write_table_delta(block_num, std::move(t_delta), bulk);
                 }
                 });
+	    }
+	    catch(...) {
+		    std::cout << "receive deltas failed" << std::endl;
+	    }
     }
 
     void write_table_delta(uint32_t block_num, table_delta&& t_delta, bool bulk) {
+	    try {
         std::visit(
                 [&block_num, bulk, this](auto t_delta) {
                 size_t num_processed = 0;
@@ -763,10 +789,15 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
                 }
                 },
             t_delta);
+	    }
+	    catch (...) {
+		    std::cout << "write table delta failed" << std::endl;
+	    }
     }
 
     void process_table_row_delta(uint32_t const block_num, std::vector<std::string> values) 
     {
+	    try {
 	uint64_t table_row_number(0);
         if (values.at(1) == "2")
         {
@@ -790,10 +821,15 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
 	}
 
 	write_table_row_data(block_num, values, table_row_number);
+	    }
+	    catch (...) {
+		    std::cout << "process table row delta failed" << std::endl;
+	    }
     }
 
     void write_table_row_data(uint32_t const block_num, std::vector<std::string> values, uint64_t const table_row_number)
     {
+	    try {
 	auto context = get_abieos_context();
 
 	// make sure the abi is loaded into the context, add it if not
@@ -833,10 +869,15 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
         table_row_data_values.push_back(itr.value().dump());
         write_stream_custom(block_num, "table_row_data", table_row_data_values);
         }
+	    }
+	    catch (...) {
+		    std::cout << "write table row data failed" << std::endl;
+	    }
     }
 
     void write_table_row(uint32_t const block_num, std::vector<std::string> values)
     {
+	    try {
 	    //TODO - Check here for duplicate data
         std::vector<std::string> table_row_values;
 
@@ -848,9 +889,14 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
         table_row_values.push_back(values.at(5));
 
         write_stream_custom(block_num, "table_rows", table_row_values);
+	    }
+	    catch (...) {
+		    std::cout << "write table row failed" << std::endl;
+	    }
     }
 
     void receive_traces(uint32_t const block_num, eosio::opaque<std::vector<eosio::ship_protocol::transaction_trace>> traces) {
+	    try {
         auto     bin = traces.get();
         uint32_t num;
         varuint32_from_bin(num, bin);
@@ -862,10 +908,14 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
             if (filter(config->trx_filters, trace))
                 write_transaction_trace(block_num, num_ordinals, trace, trace_bin);
         }
+	    }
+	    catch (...) {
+		    std::cout << "receive traces failed" << std::endl;
+	    }
     }
 
-    void write_transaction_trace(
-            uint32_t const block_num, uint32_t& num_ordinals, const eosio::ship_protocol::transaction_trace& trace, eosio::input_stream trace_bin) {
+    void write_transaction_trace(uint32_t const block_num, uint32_t& num_ordinals, const eosio::ship_protocol::transaction_trace& trace, eosio::input_stream trace_bin) {
+	    try {
         auto failed = std::visit(
                 [](auto& ttrace) { return !ttrace.failed_dtrx_trace.empty() ? &ttrace.failed_dtrx_trace[0].recurse : nullptr; }, trace);
         if (failed != nullptr) {
@@ -899,27 +949,20 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
         write_stream_custom(block_num, "transactions", values);
 
         write_action_traces(block_num, std::get<0>(trace).id, std::get<0>(trace).action_traces);
+    }
+    catch (...) {
+	    std::cout << "write transaction trace failed" << std::endl;
+    }
     } // write_transaction_trace
-
-    struct chintai_uint256_t
-    {
-        uint64_t bits[4];
-    };
 
     void write_action_traces(uint32_t const block_number,
             eosio::checksum256 const transaction_id,
             std::vector<eosio::ship_protocol::action_trace> const &action_traces)
     {
+	    try {
 	auto context = get_abieos_context();
         for (int i=0; i < action_traces.size(); ++i)
         {
-          //  chintai_uint256_t xyz;
-          //  memcpy(&xyz, &transaction_id, 32);
-          //  char hexstring[65];  // needs to be at least 64 hex digits + 1 for the null terminator
-          //  sprintf(hexstring, "%016llx%016llx%016llx%016llx", xyz.bits[3], xyz.bits[2], xyz.bits[1], xyz.bits[0]);
-          //  char trx_id[32];
-          //  memcpy(trx_id, &transaction_id, 32);
-          //  values.push_back(std::string(hexstring));
             eosio::ship_protocol::action_trace_v1 trace = std::get<1>(action_traces.at(i));
 
             if (trace.act.name.to_string() == "onblock" || 
@@ -943,7 +986,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
             size_t remaining_bytes = trace.act.data.remaining();
             unsigned char * data = new unsigned char[remaining_bytes];
             trace.act.data.read(data, remaining_bytes);
-            std::string hex_data = hexStr(data, remaining_bytes);
+            std::string hex_data = get_hex_string(data, remaining_bytes);
             delete[] data;
             values.push_back(std::to_string(trace.context_free));
             values.push_back(trace.console);
@@ -952,10 +995,15 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
 
             write_action_data(block_number, trace.act.account.to_string(), trace.act.name.to_string(), hex_data);
         }
+	    }
+	    catch (...) {
+		    std::cout << "write action traces failed" << std::endl;
+	    }
     } //write_action_traces
 
     void set_abi_hex(eosio::name const &account, std::string const &hex_data)
     {
+	    try {
 	auto context = get_abieos_context();
 	nlohmann::json json = get_json("eosio", "setabi", hex_data);
 	std::string abi_hex;
@@ -969,15 +1017,24 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
 	}
 
         abieos_set_abi_hex(context, account.value, abi_hex.c_str());
+	    }
+	    catch (...) {
+		    std::cout << "set abi hex failed" << std::endl;
+	    }
     }
 
     nlohmann::json get_json(std::string const &action_account, std::string const &action_name, std::string const &action_data)
     {
-        std::string command = "/usr/bin/cleos -u http://192.168.12.185:8888 convert unpack_action_data " + action_account + " " + action_name + " " + action_data; 
+	    try {
+        std::string command = "/usr/bin/cleos -u http://192.168.15.255:8888 convert unpack_action_data " + action_account + " " + action_name + " " + action_data; 
         std::string command_output = get_command_line_output(command);
 
         nlohmann::json command_json = nlohmann::json::parse(command_output);
 	return command_json;
+	    }
+	    catch (...) {
+		    std::cout << "get json failed" << std::endl;
+	    }
     }
 
     void write_action_data(uint32_t const block_number,
@@ -985,6 +1042,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
             std::string const &action_name,
             std::string const &action_data)
     {
+	    try {
 	nlohmann::json command_json = get_json(action_account, action_name, action_data);
 
         for (auto itr = command_json.begin(); itr != command_json.end(); ++itr)
@@ -1011,9 +1069,14 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
 	  }
 	  set_abi_hex(eosio::name{account}, action_data);
 	}
+	    }
+	    catch (...) {
+		    std::cout << "write action data failed" << std::endl;
+	    }
     } //write_action_data
 
     std::string get_command_line_output(std::string command) {
+	    try {
         const char* char_command = command.c_str(); 
 	//TODO use the exit code to determine if there was an error
         int exit_code = system(char_command);
@@ -1027,10 +1090,15 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
             result += buffer.data();
         }
         return result;
+	    }
+	    catch (...) {
+		    std::cout << "get command line output failed" << std::endl;
+	    }
     }
 
     std::string get_authorization_string(std::vector<permission_level> const &authorizations)
     {
+	    try {
         std::string authorization_string = "";
         for (int i = 0; i < authorizations.size(); ++i)
         {
@@ -1045,19 +1113,29 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
         }
 
         return authorization_string;
+	    }
+	    catch (...) {
+		    std::cout << "get authorization string failed" << std::endl;
+	    }
     }
 
     static constexpr char hexmap[] = {'0', '1', '2', '3', '4', '5', '6', '7',
         '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'};
 
-    std::string hexStr(unsigned char *data, size_t len)
+    std::string get_hex_string(unsigned char *data, size_t len)
     {
+	    try {
         std::string s(len * 2, ' ');
         for (int i = 0; i < len; ++i) {
             s[2 * i]     = hexmap[(data[i] & 0xF0) >> 4];
             s[2 * i + 1] = hexmap[data[i] & 0x0F];
         }
         return s;
+	    }
+	    catch (...)
+	    {
+		    std::cout << "get hex string failed" << std::endl;
+	    }
     }
 
     void trim() {

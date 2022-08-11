@@ -353,11 +353,11 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
 
       t.exec("create table " + converter.schema_name + ".blocks " + R"((block_number BIGINT CONSTRAINT block_info_pk PRIMARY KEY, block_id CHAR(64), timestamp TIMESTAMP, previous CHAR(64), transaction_mroot CHAR(64), action_mroot CHAR(64), producer_signature CHAR(101)))");
       t.exec("create table " + converter.schema_name + ".transactions " + R"((transaction_number BIGINT PRIMARY KEY, block_number BIGINT, transaction_ordinal INT, id CHAR(64), status VARCHAR(12)))");
-      t.exec("create table " + converter.schema_name + ".actions " + R"((action_number BIGINT PRIMARY KEY, transaction_number BIGINT, action_ordinal INT, creator_action_ordinal INT, receiver VARCHAR(12), action_account VARCHAR(12), action_name VARCHAR(12), context_free BOOL, console TEXT))");
+      t.exec("create table " + converter.schema_name + ".actions " + R"((action_number BIGINT PRIMARY KEY, transaction_number BIGINT, action_ordinal INT, creator_action_ordinal INT, receiver CHAR(12), action_account CHAR(12), action_name CHAR(12), context_free BOOL, console TEXT))");
       t.exec("create table " + converter.schema_name + ".action_data " + R"((action_data_number BIGINT PRIMARY KEY, action_number BIGINT, key VARCHAR, value TEXT))");
-      t.exec("create table " + converter.schema_name + ".table_rows " + R"((table_row_number BIGINT PRIMARY KEY, account VARCHAR(12), scope VARCHAR(13), table_name VARCHAR(12), primary_key TEXT))");
+      t.exec("create table " + converter.schema_name + ".table_rows " + R"((table_row_number BIGINT PRIMARY KEY, account CHAR(12), scope CHAR(13), table_name CHAR(12), primary_key TEXT))");
       t.exec("create table " + converter.schema_name + ".table_row_data " + R"((table_row_data_number BIGINT PRIMARY KEY, table_row_number BIGINT, block_number BIGINT, key VARCHAR, value TEXT))");
-      t.exec("create table " + converter.schema_name + ".permissions " + R"((permission_number BIGINT PRIMARY KEY, action_number BIGINT, actor VARCHAR(12), permission VARCHAR(12)))");
+      t.exec("create table " + converter.schema_name + ".permissions " + R"((permission_number BIGINT PRIMARY KEY, action_number BIGINT, actor CHAR(12), permission CHAR(12)))");
 
       for (auto& table : connection->abi.tables) {
         std::vector<std::string> keys = {"block_num", "present"};
@@ -857,6 +857,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
       auto contract_itr = context->contracts.find(::abieos::name{contract_int});
       if (contract_itr == context->contracts.end())
       {
+		    //TODO Make sure the abi is loaded in as it should be
         std::string command = "/usr/bin/psql -U postgres -h 172.17.0.3 -c 'select action_number from chain.actions where action_account = " + contract.to_string() + " and action_name = setabi order by action_number desc limit 1'";
         //TODO then use the action number to search action_data table for abi
         std::string command_output = get_command_line_output(command);

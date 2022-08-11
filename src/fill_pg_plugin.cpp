@@ -351,13 +351,13 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
                 "transaction_trace", get_type("transaction_trace"), "block_num bigint, transaction_ordinal integer",
                 {"block_num", "transaction_ordinal"}, exec);
 
-        t.exec("create table " + converter.schema_name + ".blocks " + R"((block_number BIGINT CONSTRAINT block_info_pk PRIMARY KEY, block_id varchar(64), timestamp TIMESTAMP, previous varchar(64), transaction_mroot varchar(64), action_mroot varchar(64), producer_signature varchar))");
-        t.exec("create table " + converter.schema_name + ".transactions " + R"((transaction_number BIGINT PRIMARY KEY, block_number BIGINT, transaction_ordinal INT, id varchar(64), status varchar))");
-        t.exec("create table " + converter.schema_name + ".actions " + R"((action_number BIGINT PRIMARY KEY, transaction_number BIGINT, action_ordinal INT, creator_action_ordinal INT, receiver varchar(12), action_account varchar(12), action_name varchar(12), context_free BOOL, console TEXT))");
-        t.exec("create table " + converter.schema_name + ".action_data " + R"((action_data_number BIGINT PRIMARY KEY, action_number BIGINT, key TEXT, value TEXT))");
-        t.exec("create table " + converter.schema_name + ".table_rows " + R"((table_row_number BIGINT PRIMARY KEY, account TEXT, scope TEXT, table_name TEXT, primary_key TEXT))");
-        t.exec("create table " + converter.schema_name + ".table_row_data " + R"((table_row_data_number BIGINT PRIMARY KEY, table_row_number BIGINT, block_number BIGINT, key TEXT, value TEXT))");
-        t.exec("create table " + converter.schema_name + ".permissions " + R"((permission_number BIGINT PRIMARY KEY, action_number BIGINT, actor varchar(12), permission varchar(12)))");
+        t.exec("create table " + converter.schema_name + ".blocks " + R"((block_number BIGINT CONSTRAINT block_info_pk PRIMARY KEY, block_id CHAR(64), timestamp TIMESTAMP, previous CHAR(64), transaction_mroot CHAR(64), action_mroot CHAR(64), producer_signature CHAR(101)))");
+        t.exec("create table " + converter.schema_name + ".transactions " + R"((transaction_number BIGINT PRIMARY KEY, block_number BIGINT, transaction_ordinal INT, id CHAR(64), status VARCHAR(12)))");
+        t.exec("create table " + converter.schema_name + ".actions " + R"((action_number BIGINT PRIMARY KEY, transaction_number BIGINT, action_ordinal INT, creator_action_ordinal INT, receiver VARCHAR(12), action_account VARCHAR(12), action_name VARCHAR(12), context_free BOOL, console TEXT))");
+        t.exec("create table " + converter.schema_name + ".action_data " + R"((action_data_number BIGINT PRIMARY KEY, action_number BIGINT, key VARCHAR, value TEXT))");
+        t.exec("create table " + converter.schema_name + ".table_rows " + R"((table_row_number BIGINT PRIMARY KEY, account VARCHAR(12), scope VARCHAR(13), table_name VARCHAR(12), primary_key TEXT))");
+        t.exec("create table " + converter.schema_name + ".table_row_data " + R"((table_row_data_number BIGINT PRIMARY KEY, table_row_number BIGINT, block_number BIGINT, key VARCHAR, value TEXT))");
+        t.exec("create table " + converter.schema_name + ".permissions " + R"((permission_number BIGINT PRIMARY KEY, action_number BIGINT, actor VARCHAR(12), permission VARCHAR(12)))");
 
         for (auto& table : connection->abi.tables) {
             std::vector<std::string> keys = {"block_num", "present"};

@@ -40,6 +40,7 @@ struct global_t {
     int64_t action_data_number = 0;
     int64_t table_row_number = 0;
     int64_t table_row_data_number = 0;
+    int64_t permission_number = 0;
 } global_indexes;
 
 /// define abieos context, storing abis for table row delta decoding
@@ -273,6 +274,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
             auto action_data_number = t.exec("select action_data_number from chain.action_data order by action_data_number desc limit 1");
             auto table_row_number = t.exec("select table_row_number from chain.table_rows order by table_row_number desc limit 1");
             auto table_row_data_number = t.exec("select table_row_data_number from chain.table_row_data order by table_row_data_number desc limit 1");
+            auto permission_number = t.exec("select permission_number from chain.permissions order by permission_number desc limit 1");
             if (!transaction_number.empty()) {
                 global_indexes.transaction_number = transaction_number[0][0].as<int64_t>();
             } else {
@@ -298,11 +300,16 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
             } else {
                 global_indexes.table_row_data_number = 0;
             }
+            if (!permission_number.empty()) {
+                global_indexes.permission_number = permission_number[0][0].as<int64_t>();
+            } else {
+                global_indexes.permission_number = 0;
+            }
 		}
 		catch (...) {
-			std::cout << "Setting the global index numbers failed" << std::endl;
+			elog("Setting the global index numbers failed");
+			throw;
 		}
-
         }
         connection->send(get_status_request_v0{});
     }
@@ -346,10 +353,11 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
 
         t.exec("create table " + converter.schema_name + ".blocks " + R"((block_number BIGINT CONSTRAINT block_info_pk PRIMARY KEY, block_id varchar(64), timestamp TIMESTAMP, previous varchar(64), transaction_mroot varchar(64), action_mroot varchar(64), producer_signature varchar))");
         t.exec("create table " + converter.schema_name + ".transactions " + R"((transaction_number BIGINT PRIMARY KEY, block_number BIGINT, transaction_ordinal INT, id varchar(64), status varchar))");
-        t.exec("create table " + converter.schema_name + ".actions " + R"((action_number BIGINT PRIMARY KEY, transaction_number BIGINT, action_ordinal INT, creator_action_ordinal INT, receiver varchar(12), action_account varchar(12), action_name varchar(12), action_permission TEXT, context_free BOOL, console TEXT))");
+        t.exec("create table " + converter.schema_name + ".actions " + R"((action_number BIGINT PRIMARY KEY, transaction_number BIGINT, action_ordinal INT, creator_action_ordinal INT, receiver varchar(12), action_account varchar(12), action_name varchar(12), context_free BOOL, console TEXT))");
         t.exec("create table " + converter.schema_name + ".action_data " + R"((action_data_number BIGINT PRIMARY KEY, action_number BIGINT, key TEXT, value TEXT))");
         t.exec("create table " + converter.schema_name + ".table_rows " + R"((table_row_number BIGINT PRIMARY KEY, account TEXT, scope TEXT, table_name TEXT, primary_key TEXT))");
         t.exec("create table " + converter.schema_name + ".table_row_data " + R"((table_row_data_number BIGINT PRIMARY KEY, table_row_number BIGINT, block_number BIGINT, key TEXT, value TEXT))");
+        t.exec("create table " + converter.schema_name + ".permissions " + R"((permission_number BIGINT PRIMARY KEY, action_number BIGINT, actor varchar(12), permission varchar(12)))");
 
         for (auto& table : connection->abi.tables) {
             std::vector<std::string> keys = {"block_num", "present"};
@@ -360,7 +368,8 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
         t.commit();
 	    }
 	    catch (...) {
-		    std::cout << "Create tables failed" << std::endl;
+		    elog("Create tables failed");
+		    throw;
 	    }
     } // create_tables()
 
@@ -677,7 +686,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
             }
             else if (name == "actions")
             {
-                columns = {"action_number", "transaction_number", "action_ordinal", "creator_action_ordinal", "receiver", "action_account", "action_name", "action_permission", "context_free", "console"};
+                columns = {"action_number", "transaction_number", "action_ordinal", "creator_action_ordinal", "receiver", "action_account", "action_name", "context_free", "console"};
             }
             else if (name == "action_data")
             {
@@ -691,13 +700,18 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
             {
                 columns = {"table_row_data_number", "table_row_number", "block_number", "key", "value"};
             }
+            else if (name == "permissions")
+            {
+                columns = {"permission_number", "action_number", "actor", "permission"};
+            }
 
             ts = std::make_unique<table_stream>(converter.schema_name + "." + quote_name(name), columns);
         }
         ts->writer.write_raw_line(boost::algorithm::join(values, "\t"));
 	    }
 	    catch (...) {
-		    std::cout << "write stream custom failed" << std::endl;
+		    elog("write stream custom failed");
+		    throw;
 	    }
     }
 
@@ -740,7 +754,8 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
         write_stream(block_num, "blocks", values);
 	    }
 	    catch (...) {
-		    std::cout << "receive block failed" << std::endl;
+		    elog("receive block failed");
+		    throw;
 	    }
     }
 
@@ -755,7 +770,8 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
                 });
 	    }
 	    catch(...) {
-		    std::cout << "receive deltas failed" << std::endl;
+		    elog("receive deltas failed");
+		    throw;
 	    }
     }
 
@@ -791,7 +807,8 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
             t_delta);
 	    }
 	    catch (...) {
-		    std::cout << "write table delta failed" << std::endl;
+		    elog("write table delta failed");
+		    throw;
 	    }
     }
 
@@ -824,7 +841,8 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
 	write_table_row_data(block_num, values, table_row_number);
 	    }
 	    catch (...) {
-		    std::cout << "process table row delta failed" << std::endl;
+		    elog("process table row delta failed");
+		    throw;
 	    }
     }
 
@@ -872,7 +890,8 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
         }
 	    }
 	    catch (...) {
-		    std::cout << "write table row data failed" << std::endl;
+		    elog("write table row data failed");
+		    throw;
 	    }
     }
 
@@ -892,7 +911,8 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
         write_stream_custom(block_num, "table_rows", table_row_values);
 	    }
 	    catch (...) {
-		    std::cout << "write table row failed" << std::endl;
+		    elog("write table row failed");
+		    throw;
 	    }
     }
 
@@ -911,7 +931,8 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
         }
 	    }
 	    catch (...) {
-		    std::cout << "receive traces failed" << std::endl;
+		    elog("receive traces failed");
+		    throw;
 	    }
     }
 
@@ -952,7 +973,8 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
         write_action_traces(block_num, std::get<0>(trace).id, std::get<0>(trace).action_traces);
     }
     catch (...) {
-	    std::cout << "write transaction trace failed" << std::endl;
+	    elog("write transaction trace failed");
+	    throw;
     }
     } // write_transaction_trace
 
@@ -982,8 +1004,6 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
             values.push_back(trace.receiver.to_string());
             values.push_back(trace.act.account.to_string());
             values.push_back(trace.act.name.to_string());
-            std::string authorization_string = get_authorization_string(trace.act.authorization);
-            values.push_back(authorization_string);
             size_t remaining_bytes = trace.act.data.remaining();
             unsigned char * data = new unsigned char[remaining_bytes];
             trace.act.data.read(data, remaining_bytes);
@@ -995,10 +1015,12 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
             write_stream_custom(block_number, "actions", values);
 
             write_action_data(block_number, trace.act.account.to_string(), trace.act.name.to_string(), hex_data);
+            write_permissions(block_number, trace.act.authorization);
         }
 	    }
 	    catch (...) {
-		    std::cout << "write action traces failed" << std::endl;
+		    elog("write action traces failed");
+		    throw;
 	    }
     } //write_action_traces
 
@@ -1020,22 +1042,18 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
         abieos_set_abi_hex(context, account.value, abi_hex.c_str());
 	    }
 	    catch (...) {
-		    std::cout << "set abi hex failed" << std::endl;
+		    elog("set abi hex failed");
+		    throw;
 	    }
     }
 
     nlohmann::json get_json(std::string const &action_account, std::string const &action_name, std::string const &action_data)
     {
-	    try {
-        std::string command = "/usr/bin/cleos -u http://192.168.15.255:8888 convert unpack_action_data " + action_account + " " + action_name + " " + action_data; 
+        std::string command = "/usr/bin/cleos -u http://192.168.13.11:8888 convert unpack_action_data " + action_account + " " + action_name + " " + action_data; 
         std::string command_output = get_command_line_output(command);
 
         nlohmann::json command_json = nlohmann::json::parse(command_output);
 	return command_json;
-	    }
-	    catch (...) {
-		    std::cout << "get json failed" << std::endl;
-	    }
     }
 
     void write_action_data(uint32_t const block_number,
@@ -1072,12 +1090,13 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
 	}
 	    }
 	    catch (...) {
-		    std::cout << "write action data failed" << std::endl;
+		    elog("write action data failed");
+		    throw;
 	    }
     } //write_action_data
 
-    std::string get_command_line_output(std::string command) {
-	    try {
+    std::string get_command_line_output(std::string command) 
+    {
         const char* char_command = command.c_str(); 
 	//TODO use the exit code to determine if there was an error
         int exit_code = system(char_command);
@@ -1091,33 +1110,23 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
             result += buffer.data();
         }
         return result;
-	    }
-	    catch (...) {
-		    std::cout << "get command line output failed" << std::endl;
-	    }
     }
 
-    std::string get_authorization_string(std::vector<permission_level> const &authorizations)
+    void write_permissions(uint32_t const block_number, std::vector<permission_level> const &authorizations)
     {
-	    try {
-        std::string authorization_string = "";
         for (int i = 0; i < authorizations.size(); ++i)
         {
+	    std::vector<std::string> values{};
             permission_level current = authorizations.at(i);
-            authorization_string.append(current.actor.to_string());
-            authorization_string.append("@");
-            authorization_string.append(current.permission.to_string());
-            if (i + 1 < authorizations.size())
-            {
-                authorization_string.append(", ");
-            }
-        }
+	    global_indexes.permission_number++;
 
-        return authorization_string;
-	    }
-	    catch (...) {
-		    std::cout << "get authorization string failed" << std::endl;
-	    }
+	    values.push_back(std::to_string(global_indexes.permission_number));
+	    values.push_back(std::to_string(global_indexes.action_number));
+	    values.push_back(current.actor.to_string());
+	    values.push_back(current.permission.to_string());
+
+	    write_stream_custom(block_number, "permissions", values);
+        }
     }
 
     static constexpr char hexmap[] = {'0', '1', '2', '3', '4', '5', '6', '7',
@@ -1125,18 +1134,12 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
 
     std::string get_hex_string(unsigned char *data, size_t len)
     {
-	    try {
         std::string s(len * 2, ' ');
         for (int i = 0; i < len; ++i) {
             s[2 * i]     = hexmap[(data[i] & 0xF0) >> 4];
             s[2 * i + 1] = hexmap[data[i] & 0x0F];
         }
         return s;
-	    }
-	    catch (...)
-	    {
-		    std::cout << "get hex string failed" << std::endl;
-	    }
     }
 
     void trim() {

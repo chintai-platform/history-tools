@@ -835,19 +835,15 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
       }
       else
       {
-        //TODO Make sure the table row number is recorded accurately
-        std::cout << "Existing table row" << std::endl;
         // Use table row number from existing table row
         std::string account = values.at(2);
         std::string scope = values.at(3);
         std::string table_name = values.at(4);
 
-	std::string command = "/usr/bin/psql -U postgres -h 172.17.0.3 -c \"select table_row_number from chain.table_rows where account = '" + account + "' and scope = '" + scope + "' and table_name = '" + table_name + "' limit 1\"";
+	std::string command = "/usr/bin/psql -U postgres -h 172.17.0.3 -qtAX -c \"select table_row_number from chain.table_rows where account = '" + account + "' and scope = '" + scope + "' and table_name = '" + table_name + "' limit 1\"";
         std::string command_output = get_command_line_output(command);
 
-        std::cout << "command output: " << command_output << std::endl;
-
-        //table_row_number = command_output[0][0].as<uint64_t>();
+        table_row_number = stoi(command_output);
       }
 
       write_table_row_data(block_num, values, table_row_number);
@@ -869,22 +865,10 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
       auto contract_itr = context->contracts.find(::abieos::name{contract_int});
       if (contract_itr == context->contracts.end())
       {
-		    //TODO Make sure the abi is loaded in as it should be
-        std::string command = "/usr/bin/psql -U postgres -h 172.17.0.3 -c \"select action_number from chain.actions where action_account = '" + contract.to_string() + "' and action_name = 'setabi' order by action_number desc limit 1\"";
-        std::string command_output = get_command_line_output(command);
-//        uint64_t action_number = command_output[0][0].as<uint64_t>();
-//
-//        //TODO then use the action number to search action_data table for abi
-//        std::string command2 = "/usr/bin/psql -U postgres -h 172.17.0.3 -c \"select value from chain.action_data where action_number = '" + std::to_string(action_number) + "' and key = 'abi' limit 1\"";
-//        std::string command_output2 = get_command_line_output(command2);
-//
-//        std::string hex_data = actions_row[0][0].as<std::string>();
-//        std::cout << "Abi not loaded into context" << std::endl;
-//        std::cout << "1st command output: " << command_output << std::endl;
-//        std::cout << "2nd command output: " << command_output2 << std::endl;
-//        std::cout << "hex data: " << hex_data << std::endl;
-//
-//        set_abi_hex(contract, hex_data);
+        std::string command = "/usr/bin/psql -U postgres -h 172.17.0.3 -qtAX -c \"select abi from chain.abis where account = '" + contract.to_string() + "' order by abi_number desc limit 1\"";
+        std::string hex_data = get_command_line_output(command);
+
+        set_abi_hex(contract, hex_data);
       }
 
       eosio::name table_name = eosio::name{values.at(4)};
@@ -918,8 +902,12 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
   {
     try {
       //TODO - Check here for duplicate data
-//      std::string command = "/usr/bin/psql -U postgres -h 172.17.0.3 -c \"select * from chain.table_rows where account = '" + values.at(2) + "' and scope = '" + values.at(3) + "' and table_name = '" + values.at(4) + "' and primary_key = '" + values.at(5) + "' limit 1\"";
-//      std::string command_output = get_command_line_output(command);
+      std::string command = "/usr/bin/psql -U postgres -h 172.17.0.3 -qtAX -c \"select * from chain.table_rows where account = '" + values.at(2) + "' and scope = '" + values.at(3) + "' and table_name = '" + values.at(4) + "' and primary_key = '" + values.at(5) + "' limit 1\"";
+      std::string command_output = get_command_line_output(command);
+      if (!command_output.empty())
+      {
+        return;
+      }
 
       std::vector<std::string> table_row_values;
 
@@ -1059,20 +1047,15 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
                  std::string const &action_data)
   {
     try {
-      nlohmann::json command_json = get_json(action_account, action_name, action_data);
+      nlohmann::json json = get_json(action_account, action_name, action_data);
       std::string account;
-      std::string abi;
 
-      for (auto itr = command_json.begin(); itr != command_json.end(); ++itr)
+      for (auto itr = json.begin(); itr != json.end(); ++itr)
       {
         if (itr.key() == "account")
         {
           account = itr.value();
         }
-	else if (itr.key() == "abi")
-	{
-	  abi = itr.value();
-	}
       }
 
       std::vector<std::string> values{};
@@ -1081,7 +1064,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
       values.push_back(std::to_string(global_indexes.abi_number));
       values.push_back(std::to_string(global_indexes.action_number));
       values.push_back(account);
-      values.push_back(abi);
+      values.push_back(action_data);
       write_stream_custom(block_number, "abis", values);
 
       set_abi_hex(eosio::name{account}, action_data);
@@ -1092,27 +1075,27 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
     }
   } //write_abi
 
-  void set_abi_hex(eosio::name const &account, std::string const &hex_data)
-  {
-    try {
-      auto context = get_abieos_context();
-      nlohmann::json json = get_json("eosio", "setabi", hex_data);
-      std::string abi_hex;
-      for (auto itr = json.begin(); itr != json.end(); ++itr)
-      {
-        if (itr.key() == "abi")
-        {
-          abi_hex = itr.value().dump().c_str();
-          abi_hex.erase(remove(abi_hex.begin(), abi_hex.end(), '"'), abi_hex.end());
-        }
-      }
-      abieos_set_abi_hex(context, account.value, abi_hex.c_str());
-    }
-    catch (...) {
-      elog("set abi hex failed");
-      throw;
-    }
-  }
+   void set_abi_hex(eosio::name const &account, std::string const &hex_data)
+   {
+     try {
+       auto context = get_abieos_context();
+       nlohmann::json json = get_json("eosio", "setabi", hex_data);
+       std::string abi_hex;
+       for (auto itr = json.begin(); itr != json.end(); ++itr)
+       {
+         if (itr.key() == "abi")
+         {
+           abi_hex = itr.value().dump().c_str();
+           abi_hex.erase(remove(abi_hex.begin(), abi_hex.end(), '"'), abi_hex.end());
+         }
+       }
+       abieos_set_abi_hex(context, account.value, abi_hex.c_str());
+     }
+     catch (...) {
+       elog("set abi hex failed");
+       throw;
+     }
+   }
 
   nlohmann::json get_json(std::string const &action_account, std::string const &action_name, std::string const &action_data)
   {

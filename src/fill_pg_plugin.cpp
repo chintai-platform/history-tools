@@ -41,6 +41,7 @@ struct global_t {
   int64_t table_row_number = 0;
   int64_t table_row_data_number = 0;
   int64_t permission_number = 0;
+  int64_t abi_number = 0;
 } global_indexes;
 
 /// define abieos context, storing abis for table row delta decoding
@@ -275,6 +276,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
         auto table_row_number = t.exec("select table_row_number from chain.table_rows order by table_row_number desc limit 1");
         auto table_row_data_number = t.exec("select table_row_data_number from chain.table_row_data order by table_row_data_number desc limit 1");
         auto permission_number = t.exec("select permission_number from chain.permissions order by permission_number desc limit 1");
+        auto abi_number = t.exec("select abi_number from chain.abis order by abi_number desc limit 1");
         if (!transaction_number.empty()) {
           global_indexes.transaction_number = transaction_number[0][0].as<int64_t>();
         } else {
@@ -304,6 +306,11 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
           global_indexes.permission_number = permission_number[0][0].as<int64_t>();
         } else {
           global_indexes.permission_number = 0;
+        }
+        if (!abi_number.empty()) {
+          global_indexes.abi_number = abi_number[0][0].as<int64_t>();
+        } else {
+          global_indexes.abi_number = 0;
         }
       }
       catch (...) {
@@ -358,6 +365,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
       t.exec("create table " + converter.schema_name + ".table_rows " + R"((table_row_number BIGINT PRIMARY KEY, account CHAR(12), scope CHAR(13), table_name CHAR(12), primary_key TEXT))");
       t.exec("create table " + converter.schema_name + ".table_row_data " + R"((table_row_data_number BIGINT PRIMARY KEY, table_row_number BIGINT, block_number BIGINT, key VARCHAR, value TEXT))");
       t.exec("create table " + converter.schema_name + ".permissions " + R"((permission_number BIGINT PRIMARY KEY, action_number BIGINT, actor CHAR(12), permission CHAR(12)))");
+      t.exec("create table " + converter.schema_name + ".abis " + R"((abi_number BIGINT PRIMARY KEY, action_number BIGINT, account CHAR(12), abi TEXT))");
 
       for (auto& table : connection->abi.tables) {
         std::vector<std::string> keys = {"block_num", "present"};
@@ -704,6 +712,10 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
         {
           columns = {"permission_number", "action_number", "actor", "permission"};
         }
+        else if (name == "abis")
+        {
+          columns = {"abi_number", "action_number", "account", "abi"};
+        }
 
         ts = std::make_unique<table_stream>(converter.schema_name + "." + quote_name(name), columns);
       }
@@ -830,12 +842,12 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
         std::string scope = values.at(3);
         std::string table_name = values.at(4);
 
-        std::string command = "/usr/bin/psql -U postgres -h 172.17.0.3 -c 'select table_row_number from chain.table_rows where account = " + account + " and scope = " + scope + " and table_name = " + table_name + " limit 1'"; 
+	std::string command = "/usr/bin/psql -U postgres -h 172.17.0.3 -c \"select table_row_number from chain.table_rows where account = '" + account + "' and scope = '" + scope + "' and table_name = '" + table_name + "' limit 1\"";
         std::string command_output = get_command_line_output(command);
 
-        std::cout << command_output << std::endl;
+        std::cout << "command output: " << command_output << std::endl;
 
-        //table_row_number = table_row[0][0].as<uint64_t>();
+        //table_row_number = command_output[0][0].as<uint64_t>();
       }
 
       write_table_row_data(block_num, values, table_row_number);
@@ -858,16 +870,21 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
       if (contract_itr == context->contracts.end())
       {
 		    //TODO Make sure the abi is loaded in as it should be
-        std::string command = "/usr/bin/psql -U postgres -h 172.17.0.3 -c 'select action_number from chain.actions where action_account = " + contract.to_string() + " and action_name = setabi order by action_number desc limit 1'";
-        //TODO then use the action number to search action_data table for abi
+        std::string command = "/usr/bin/psql -U postgres -h 172.17.0.3 -c \"select action_number from chain.actions where action_account = '" + contract.to_string() + "' and action_name = 'setabi' order by action_number desc limit 1\"";
         std::string command_output = get_command_line_output(command);
-
-        std::cout << "Abi not loaded into context" << std::endl;
-        std::cout << command_output << std::endl;
-
-        //	   std::string hex_data = actions_row[0][8].as<std::string>();
-        //	   std::cout << "hex data: " << hex_data << std::endl;
-        //	   set_abi_hex(contract, hex_data);
+//        uint64_t action_number = command_output[0][0].as<uint64_t>();
+//
+//        //TODO then use the action number to search action_data table for abi
+//        std::string command2 = "/usr/bin/psql -U postgres -h 172.17.0.3 -c \"select value from chain.action_data where action_number = '" + std::to_string(action_number) + "' and key = 'abi' limit 1\"";
+//        std::string command_output2 = get_command_line_output(command2);
+//
+//        std::string hex_data = actions_row[0][0].as<std::string>();
+//        std::cout << "Abi not loaded into context" << std::endl;
+//        std::cout << "1st command output: " << command_output << std::endl;
+//        std::cout << "2nd command output: " << command_output2 << std::endl;
+//        std::cout << "hex data: " << hex_data << std::endl;
+//
+//        set_abi_hex(contract, hex_data);
       }
 
       eosio::name table_name = eosio::name{values.at(4)};
@@ -901,11 +918,14 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
   {
     try {
       //TODO - Check here for duplicate data
+//      std::string command = "/usr/bin/psql -U postgres -h 172.17.0.3 -c \"select * from chain.table_rows where account = '" + values.at(2) + "' and scope = '" + values.at(3) + "' and table_name = '" + values.at(4) + "' and primary_key = '" + values.at(5) + "' limit 1\"";
+//      std::string command_output = get_command_line_output(command);
+
       std::vector<std::string> table_row_values;
 
       global_indexes.table_row_number++;
       table_row_values.push_back(std::to_string(global_indexes.table_row_number));
-      table_row_values.push_back(values.at(0));
+      table_row_values.push_back(values.at(2));
       table_row_values.push_back(values.at(3));
       table_row_values.push_back(values.at(4));
       table_row_values.push_back(values.at(5));
@@ -1015,9 +1035,16 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
         values.push_back(trace.console);
 
         write_stream_custom(block_number, "actions", values);
-
-        write_action_data(block_number, trace.act.account.to_string(), trace.act.name.to_string(), hex_data);
         write_permissions(block_number, trace.act.authorization);
+
+        if (trace.act.name.to_string() != "setabi")
+	{
+          write_action_data(block_number, trace.act.account.to_string(), trace.act.name.to_string(), hex_data);
+	}
+	else
+	{
+	  write_abi(block_number, trace.act.account.to_string(), trace.act.name.to_string(), hex_data);
+	}
       }
     }
     catch (...) {
@@ -1025,6 +1052,45 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
       throw;
     }
   } //write_action_traces
+
+  void write_abi(uint32_t const block_number,
+                 std::string const &action_account,
+                 std::string const &action_name,
+                 std::string const &action_data)
+  {
+    try {
+      nlohmann::json command_json = get_json(action_account, action_name, action_data);
+      std::string account;
+      std::string abi;
+
+      for (auto itr = command_json.begin(); itr != command_json.end(); ++itr)
+      {
+        if (itr.key() == "account")
+        {
+          account = itr.value();
+        }
+	else if (itr.key() == "abi")
+	{
+	  abi = itr.value();
+	}
+      }
+
+      std::vector<std::string> values{};
+
+      global_indexes.abi_number++;
+      values.push_back(std::to_string(global_indexes.abi_number));
+      values.push_back(std::to_string(global_indexes.action_number));
+      values.push_back(account);
+      values.push_back(abi);
+      write_stream_custom(block_number, "abis", values);
+
+      set_abi_hex(eosio::name{account}, action_data);
+    }
+    catch (...) {
+      elog("write abi failed");
+      throw;
+    }
+  } //write_abi
 
   void set_abi_hex(eosio::name const &account, std::string const &hex_data)
   {
@@ -1040,7 +1106,6 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
           abi_hex.erase(remove(abi_hex.begin(), abi_hex.end(), '"'), abi_hex.end());
         }
       }
-
       abieos_set_abi_hex(context, account.value, abi_hex.c_str());
     }
     catch (...) {
@@ -1076,19 +1141,6 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
         values.push_back(itr.key());
         values.push_back(itr.value().dump());
         write_stream_custom(block_number, "action_data", values);
-      }
-
-      if(action_name == "setabi")
-      {
-        std::string account;
-        for (auto itr = command_json.begin(); itr != command_json.end(); ++itr)
-        {
-          if (itr.key() == "account")
-          {
-            account = itr.value();
-          }
-        }
-        set_abi_hex(eosio::name{account}, action_data);
       }
     }
     catch (...) {

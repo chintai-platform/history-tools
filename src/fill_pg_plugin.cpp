@@ -857,6 +857,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
 	auto contract_itr = context->contracts.find(::abieos::name{contract_int});
 	if (contract_itr == context->contracts.end())
   	{
+		//TODO Make sure the abi is loaded in as it should be
            std::string command = "/usr/bin/psql -U postgres -h 172.17.0.3 -c 'select action_data from chain.actions where action_account = " + contract.to_string() + " and action_name = setabi limit 1'"; 
            std::string command_output = get_command_line_output(command);
 

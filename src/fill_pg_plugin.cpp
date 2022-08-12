@@ -267,7 +267,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
       create_tables();
       config->create_schema = false;
     }
-    else if (global_indexes.transaction_number == 0) {
+    if (global_indexes.transaction_number == 0) {
       try {
         work_t t(*sql_connection);
         auto transaction_number = t.exec("select transaction_number from chain.transactions order by transaction_number desc limit 1");
@@ -322,15 +322,23 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
   }
 
   bool received(get_status_result_v0& status) override {
+	  ilog("received in");
     work_t t(*sql_connection);
+    ilog("t");
     load_fill_status(t);
+    ilog("load_fill_status");
     auto       positions = get_positions(t);
     pipeline_t pipeline(t);
+    ilog("pipeline");
     truncate(t, pipeline, head + 1);
+    ilog("truncate");
     pipeline.complete();
+    ilog("pipeline complete");
     t.commit();
+    ilog("commit");
 
     connection->request_blocks(status, std::max(config->skip_to, head + 1), positions);
+	  ilog("received out");
     return true;
   }
 
@@ -353,25 +361,26 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
       t.exec("insert into " + converter.schema_name + R"(.fill_status values (0, '', 0, '', 0))");
 
       auto exec = [&t](const auto& stmt) { t.exec(stmt); };
-      converter.create_table("block_info", get_type("signed_block_header"), "block_num bigint, block_id varchar(64)", {"block_num"}, exec);
-      converter.create_table(
-                             "transaction_trace", get_type("transaction_trace"), "block_num bigint, transaction_ordinal integer",
-                             {"block_num", "transaction_ordinal"}, exec);
+      // converter.create_table("block_info", get_type("signed_block_header"), "block_num bigint, block_id varchar(64)", {"block_num"}, exec);
+      // converter.create_table(
+      //                        "transaction_trace", get_type("transaction_trace"), "block_num bigint, transaction_ordinal integer",
+      //                        {"block_num", "transaction_ordinal"}, exec);
 
+      // create chintai tables
       t.exec("create table " + converter.schema_name + ".blocks " + R"((block_number BIGINT CONSTRAINT block_info_pk PRIMARY KEY, block_id CHAR(64), timestamp TIMESTAMP, previous CHAR(64), transaction_mroot CHAR(64), action_mroot CHAR(64), producer_signature CHAR(101)))");
-      t.exec("create table " + converter.schema_name + ".transactions " + R"((transaction_number BIGINT PRIMARY KEY, block_number BIGINT, transaction_ordinal INT, id CHAR(64), status VARCHAR(12)))");
-      t.exec("create table " + converter.schema_name + ".actions " + R"((action_number BIGINT PRIMARY KEY, transaction_number BIGINT, action_ordinal INT, creator_action_ordinal INT, receiver CHAR(12), action_account CHAR(12), action_name CHAR(12), context_free BOOL, console TEXT))");
-      t.exec("create table " + converter.schema_name + ".action_data " + R"((action_data_number BIGINT PRIMARY KEY, action_number BIGINT, key VARCHAR, value TEXT))");
+      t.exec("create table " + converter.schema_name + ".transactions " + R"((transaction_number BIGINT PRIMARY KEY, block_number BIGINT, transaction_ordinal INT, id CHAR(64), status VARCHAR(12), CONSTRAINT fk_blocks FOREIGN KEY(block_number) REFERENCES chain.blocks(block_number) ON DELETE CASCADE ON UPDATE CASCADE))");
+      t.exec("create table " + converter.schema_name + ".actions " + R"((action_number BIGINT PRIMARY KEY, transaction_number BIGINT, action_ordinal INT, creator_action_ordinal INT, receiver CHAR(12), action_account CHAR(12), action_name CHAR(12), context_free BOOL, console TEXT, CONSTRAINT fk_transactions FOREIGN KEY(transaction_number) REFERENCES chain.transactions(transaction_number) ON DELETE CASCADE ON UPDATE CASCADE))");
+      t.exec("create table " + converter.schema_name + ".action_data " + R"((action_data_number BIGINT PRIMARY KEY, action_number BIGINT, key VARCHAR, value TEXT, CONSTRAINT fk_action_number FOREIGN KEY(action_number) REFERENCES chain.actions(action_number) ON DELETE CASCADE ON UPDATE CASCADE))");
       t.exec("create table " + converter.schema_name + ".table_rows " + R"((table_row_number BIGINT PRIMARY KEY, account CHAR(12), scope CHAR(13), table_name CHAR(12), primary_key TEXT))");
-      t.exec("create table " + converter.schema_name + ".table_row_data " + R"((table_row_data_number BIGINT PRIMARY KEY, table_row_number BIGINT, block_number BIGINT, key VARCHAR, value TEXT))");
+      t.exec("create table " + converter.schema_name + ".table_row_data " + R"((table_row_data_number BIGINT PRIMARY KEY, table_row_number BIGINT, block_number BIGINT, key VARCHAR, value TEXT, CONSTRAINT fk_block_number FOREIGN KEY(block_number) REFERENCES chain.blocks(block_number) ON DELETE CASCADE ON UPDATE CASCADE, CONSTRAINT fk_table_row_number FOREIGN KEY(table_row_number) REFERENCES chain.table_rows(table_row_number) ON DELETE CASCADE ON UPDATE CASCADE))");
       t.exec("create table " + converter.schema_name + ".permissions " + R"((permission_number BIGINT PRIMARY KEY, action_number BIGINT, actor CHAR(12), permission CHAR(12)))");
-      t.exec("create table " + converter.schema_name + ".abis " + R"((abi_number BIGINT PRIMARY KEY, action_number BIGINT, account CHAR(12), abi TEXT))");
+      t.exec("create table " + converter.schema_name + ".abis " + R"((abi_number BIGINT PRIMARY KEY, action_number BIGINT, account CHAR(12), abi TEXT, CONSTRAINT fk_action_number FOREIGN KEY(action_number) REFERENCES chain.actions(action_number) ON DELETE CASCADE ON UPDATE CASCADE))");
 
-      for (auto& table : connection->abi.tables) {
-        std::vector<std::string> keys = {"block_num", "present"};
-        keys.insert(keys.end(), table.key_names.begin(), table.key_names.end());
-        converter.create_table(table.type, get_type(table.type), "block_num bigint, present smallint", keys, exec);
-      }
+   //   for (auto& table : connection->abi.tables) {
+   //     std::vector<std::string> keys = {"block_num", "present"};
+   //     keys.insert(keys.end(), table.key_names.begin(), table.key_names.end());
+   //     converter.create_table(table.type, get_type(table.type), "block_num bigint, present smallint", keys, exec);
+   //   }
 
       t.commit();
     }
@@ -420,7 +429,8 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
 
     static const char* const simple_cases[] = {
       "received_block",
-      "transaction_trace",
+      // "transaction_trace",
+      "transactions",
       "blocks",
     };
 
@@ -538,16 +548,24 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
     auto trunc = [&](const std::string& name) {
       std::string query{"delete from " + converter.schema_name + "." + quote_name(name) +
         " where block_num >= " + std::to_string(block)};
+      // std::cout << "query: " << query << std::endl;
       pipeline.insert(query);
     };
     trunc("received_block");
-    trunc("transaction_trace");
+    // trunc("transaction_trace");
+    // trunc("transactions");
     std::string query{"delete from " + converter.schema_name + "." + quote_name("blocks") +
       " where block_number >= " + std::to_string(block)};
     pipeline.insert(query);
-    for (auto& table : connection->abi.tables) {
-      trunc(table.type);
-    }
+    // std::cout << "query: " << query << std::endl;
+    std::string query1{"delete from " + converter.schema_name + "." + quote_name("transactions") +
+      " where block_number >= " + std::to_string(block)};
+    pipeline.insert(query1);
+    // std::cout << "query: " << query1 << std::endl;
+    // TODO: Fix clean process
+    // for (auto& table : connection->abi.tables) {
+    //   trunc(table.type);
+    // }
 
     auto result = pipeline.retrieve(pipeline.insert(
                                                     "select block_id from " + converter.schema_name + ".received_block where block_num=" + std::to_string(block - 1)));
@@ -901,7 +919,6 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
   void write_table_row(uint32_t const block_num, std::vector<std::string> values)
   {
     try {
-      //TODO - Check here for duplicate data
       std::string command = "/usr/bin/psql -U postgres -h 172.17.0.3 -qtAX -c \"select * from chain.table_rows where account = '" + values.at(2) + "' and scope = '" + values.at(3) + "' and table_name = '" + values.at(4) + "' and primary_key = '" + values.at(5) + "' limit 1\"";
       std::string command_output = get_command_line_output(command);
       if (!command_output.empty())
@@ -1022,17 +1039,18 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
         values.push_back(std::to_string(trace.context_free));
         values.push_back(trace.console);
 
-        write_stream_custom(block_number, "actions", values);
-        write_permissions(block_number, trace.act.authorization);
-
-        if (trace.act.name.to_string() != "setabi")
-	{
-          write_action_data(block_number, trace.act.account.to_string(), trace.act.name.to_string(), hex_data);
-	}
-	else
+	// write abi before actions, due to foreign key constraints
+        if (trace.act.name.to_string() == "setabi")	
 	{
 	  write_abi(block_number, trace.act.account.to_string(), trace.act.name.to_string(), hex_data);
 	}
+	else
+	{
+          write_action_data(block_number, trace.act.account.to_string(), trace.act.name.to_string(), hex_data);
+	}
+
+        write_stream_custom(block_number, "actions", values);
+        write_permissions(block_number, trace.act.authorization);
       }
     }
     catch (...) {

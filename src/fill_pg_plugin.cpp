@@ -368,13 +368,37 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
 
       // create chintai tables
       t.exec("create table " + converter.schema_name + ".blocks " + R"((block_number BIGINT CONSTRAINT block_info_pk PRIMARY KEY, block_id CHAR(64), timestamp TIMESTAMP, previous CHAR(64), transaction_mroot CHAR(64), action_mroot CHAR(64), producer_signature CHAR(101)))");
-      t.exec("create table " + converter.schema_name + ".transactions " + R"((transaction_number BIGINT PRIMARY KEY, block_number BIGINT, transaction_ordinal INT, id CHAR(64), status VARCHAR(12), CONSTRAINT fk_blocks FOREIGN KEY(block_number) REFERENCES chain.blocks(block_number) ON DELETE CASCADE ON UPDATE CASCADE))");
-      t.exec("create table " + converter.schema_name + ".actions " + R"((action_number BIGINT PRIMARY KEY, transaction_number BIGINT, action_ordinal INT, creator_action_ordinal INT, receiver CHAR(12), action_account CHAR(12), action_name CHAR(12), context_free BOOL, console TEXT, CONSTRAINT fk_transactions FOREIGN KEY(transaction_number) REFERENCES chain.transactions(transaction_number) ON DELETE CASCADE ON UPDATE CASCADE))");
-      t.exec("create table " + converter.schema_name + ".action_data " + R"((action_data_number BIGINT PRIMARY KEY, action_number BIGINT, key VARCHAR, value TEXT, CONSTRAINT fk_action_number FOREIGN KEY(action_number) REFERENCES chain.actions(action_number) ON DELETE CASCADE ON UPDATE CASCADE))");
+      t.exec("create table " + converter.schema_name + ".transactions " + R"((transaction_number BIGINT PRIMARY KEY, block_number BIGINT, transaction_ordinal INT, id CHAR(64), status VARCHAR(12)))");
+      t.exec("create table " + converter.schema_name + ".actions " + R"((action_number BIGINT PRIMARY KEY, transaction_number BIGINT, action_ordinal INT, creator_action_ordinal INT, receiver CHAR(12), action_account CHAR(12), action_name CHAR(12), context_free BOOL, console TEXT))");
+      t.exec("create table " + converter.schema_name + ".action_data " + R"((action_data_number BIGINT PRIMARY KEY, action_number BIGINT, key VARCHAR, value TEXT))");
       t.exec("create table " + converter.schema_name + ".table_rows " + R"((table_row_number BIGINT PRIMARY KEY, account CHAR(12), scope CHAR(13), table_name CHAR(12), primary_key TEXT))");
-      t.exec("create table " + converter.schema_name + ".table_row_data " + R"((table_row_data_number BIGINT PRIMARY KEY, table_row_number BIGINT, block_number BIGINT, key VARCHAR, value TEXT, CONSTRAINT fk_block_number FOREIGN KEY(block_number) REFERENCES chain.blocks(block_number) ON DELETE CASCADE ON UPDATE CASCADE, CONSTRAINT fk_table_row_number FOREIGN KEY(table_row_number) REFERENCES chain.table_rows(table_row_number) ON DELETE CASCADE ON UPDATE CASCADE))");
+      t.exec("create table " + converter.schema_name + ".table_row_data " + R"((table_row_data_number BIGINT PRIMARY KEY, table_row_number BIGINT, block_number BIGINT, key VARCHAR, value TEXT))");
       t.exec("create table " + converter.schema_name + ".permissions " + R"((permission_number BIGINT PRIMARY KEY, action_number BIGINT, actor CHAR(12), permission CHAR(12)))");
-      t.exec("create table " + converter.schema_name + ".abis " + R"((abi_number BIGINT PRIMARY KEY, action_number BIGINT, account CHAR(12), abi TEXT, CONSTRAINT fk_action_number FOREIGN KEY(action_number) REFERENCES chain.actions(action_number) ON DELETE CASCADE ON UPDATE CASCADE))");
+      t.exec("create table " + converter.schema_name + ".abis " + R"((abi_number BIGINT PRIMARY KEY, action_number BIGINT, account CHAR(12), abi TEXT))");
+
+      // create chintai indices
+      t.exec("create index block_index_timestamp on " + converter.schema_name + ".blocks" + R"((timestamp))");
+      t.exec("create index block_index_id on " + converter.schema_name + ".blocks" + R"((block_id))");
+      t.exec("create index transaction_index_block on " + converter.schema_name + ".transactions" + R"((block_number))");
+      t.exec("create index action_transaction on " + converter.schema_name + ".actions" + R"((transaction_number))");
+      t.exec("create index action_receiver on " + converter.schema_name + ".actions" + R"((receiver))");
+      t.exec("create index action_account on " + converter.schema_name + ".actions" + R"((action_account))");
+      t.exec("create index action_name on " + converter.schema_name + ".actions" + R"((action_name))");
+      t.exec("create index action_data_action_number on " + converter.schema_name + ".action_data" + R"((action_number))");
+      t.exec("create index action_data_key on " + converter.schema_name + ".action_data" + R"((key))");
+      t.exec("create index action_data_value on " + converter.schema_name + ".action_data" + R"((value))");
+      t.exec("create index table_rows_account on " + converter.schema_name + ".table_rows" + R"((account))");
+      t.exec("create index table_rows_scope on " + converter.schema_name + ".table_rows" + R"((scope))");
+      t.exec("create index table_rows_table on " + converter.schema_name + ".table_rows" + R"((table_name))");
+      t.exec("create index table_rows_pk on " + converter.schema_name + ".table_rows" + R"((primary_key))");
+      t.exec("create index table_row_data_table_row_number on " + converter.schema_name + ".table_row_data" + R"((table_row_number))");
+      t.exec("create index table_row_data_block on " + converter.schema_name + ".table_row_data" + R"((block_number))");
+      t.exec("create index table_row_data_key on " + converter.schema_name + ".table_row_data" + R"((key))");
+      t.exec("create index table_row_data_value on " + converter.schema_name + ".table_row_data" + R"((value))");
+      t.exec("create index permissions_action_number on " + converter.schema_name + ".permissions" + R"((action_number))");
+      t.exec("create index permissions_actor on " + converter.schema_name + ".permissions" + R"((actor))");
+      t.exec("create index abis_action_number on " + converter.schema_name + ".abis" + R"((action_number))");
+      t.exec("create index abis_account on " + converter.schema_name + ".abis" + R"((account))");
 
    //   for (auto& table : connection->abi.tables) {
    //     std::vector<std::string> keys = {"block_num", "present"};
@@ -1039,7 +1063,9 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
         values.push_back(std::to_string(trace.context_free));
         values.push_back(trace.console);
 
-	// write abi before actions, due to foreign key constraints
+        write_stream_custom(block_number, "actions", values);
+        write_permissions(block_number, trace.act.authorization);
+
         if (trace.act.name.to_string() == "setabi")	
 	{
 	  write_abi(block_number, trace.act.account.to_string(), trace.act.name.to_string(), hex_data);
@@ -1049,8 +1075,6 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
           write_action_data(block_number, trace.act.account.to_string(), trace.act.name.to_string(), hex_data);
 	}
 
-        write_stream_custom(block_number, "actions", values);
-        write_permissions(block_number, trace.act.authorization);
       }
     }
     catch (...) {
@@ -1153,8 +1177,12 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
   std::string get_command_line_output(std::string command) 
   {
     const char* char_command = command.c_str(); 
-    //TODO use the exit code to determine if there was an error
     int exit_code = system(char_command);
+    if (exit_code)
+    {
+      elog("Executing a command on the command line failed");
+      throw;
+    }
     std::array<char, 128> buffer;
     std::string result;
     std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(char_command, "r"), pclose);

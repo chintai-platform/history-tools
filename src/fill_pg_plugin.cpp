@@ -308,23 +308,15 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
   }
 
   bool received(get_status_result_v0& status) override {
-    ilog("received in");
     work_t t(*sql_connection);
-    ilog("t");
     load_fill_status(t);
-    ilog("load_fill_status");
     auto       positions = get_positions(t);
     pipeline_t pipeline(t);
-    ilog("pipeline");
     truncate(t, pipeline, head + 1);
-    ilog("truncate");
     pipeline.complete();
-    ilog("pipeline complete");
     t.commit();
-    ilog("commit");
 
     connection->request_blocks(status, std::max(config->skip_to, head + 1), positions);
-    ilog("received out");
     return true;
   }
 
@@ -405,7 +397,6 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
       for (auto& k : table.key_names)
         query += "    " + quote_name(k) + ",\n";
       query += "    \"block_num\" desc,\n    \"present\" desc\n)";
-      // std::cout << query << ";\n\n";
       t.exec(query);
     }
 
@@ -413,7 +404,6 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
             drop function if exists )" +
     converter.schema_name + R"(.trim_history;
         )";
-    // std::cout << query << "\n";
     t.exec(query);
 
     query = R"(
@@ -429,7 +419,6 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
 
     static const char* const simple_cases[] = {
       "received_block",
-      // "transaction_trace",
       "transactions",
       "blocks",
     };
@@ -548,24 +537,15 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
     auto trunc = [&](const std::string& name) {
       std::string query{"delete from " + converter.schema_name + "." + quote_name(name) +
         " where block_num >= " + std::to_string(block)};
-      // std::cout << "query: " << query << std::endl;
       pipeline.insert(query);
     };
     trunc("received_block");
-    // trunc("transaction_trace");
-    // trunc("transactions");
     std::string query{"delete from " + converter.schema_name + "." + quote_name("blocks") +
       " where block_number >= " + std::to_string(block)};
     pipeline.insert(query);
-    // std::cout << "query: " << query << std::endl;
     std::string query1{"delete from " + converter.schema_name + "." + quote_name("transactions") +
       " where block_number >= " + std::to_string(block)};
     pipeline.insert(query1);
-    // std::cout << "query: " << query1 << std::endl;
-    // TODO: Fix clean process
-    // for (auto& table : connection->abi.tables) {
-    //   trunc(table.type);
-    // }
 
     auto result = pipeline.retrieve(pipeline.insert(
                                                     "select block_id from " + converter.schema_name + ".received_block where block_num=" + std::to_string(block - 1)));

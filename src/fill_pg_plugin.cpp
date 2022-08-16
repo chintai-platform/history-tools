@@ -80,20 +80,6 @@ struct work_t {
   auto quote_name(const std::string& str) { return w.quote_name(str); }
 };
 
-/// connection struct to initalize and access the SQL connection from everywhere
-// struct connection {
-//   work_t t;
-//   work_t* get_connection() 
-//   {
-//     if (t == NULL)
-//     {
-//       work_t link(*sql_connection);
-//       t = link;
-//     }
-//     return t;
-//   }
-// }
-
 /// a wrapper class for pqxx::pipeline to log the SQL command sent to database
 struct pipeline_t {
   pqxx::pipeline p;
@@ -322,7 +308,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
   }
 
   bool received(get_status_result_v0& status) override {
-	  ilog("received in");
+    ilog("received in");
     work_t t(*sql_connection);
     ilog("t");
     load_fill_status(t);
@@ -338,7 +324,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
     ilog("commit");
 
     connection->request_blocks(status, std::max(config->skip_to, head + 1), positions);
-	  ilog("received out");
+    ilog("received out");
     return true;
   }
 
@@ -361,10 +347,6 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
       t.exec("insert into " + converter.schema_name + R"(.fill_status values (0, '', 0, '', 0))");
 
       auto exec = [&t](const auto& stmt) { t.exec(stmt); };
-      // converter.create_table("block_info", get_type("signed_block_header"), "block_num bigint, block_id varchar(64)", {"block_num"}, exec);
-      // converter.create_table(
-      //                        "transaction_trace", get_type("transaction_trace"), "block_num bigint, transaction_ordinal integer",
-      //                        {"block_num", "transaction_ordinal"}, exec);
 
       // create chintai tables
       t.exec("create table " + converter.schema_name + ".blocks " + R"((block_number BIGINT CONSTRAINT block_info_pk PRIMARY KEY, block_id CHAR(64), timestamp TIMESTAMP, previous CHAR(64), transaction_mroot CHAR(64), action_mroot CHAR(64), producer_signature CHAR(101)))");
@@ -399,12 +381,6 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
       t.exec("create index permissions_actor on " + converter.schema_name + ".permissions" + R"((actor))");
       t.exec("create index abis_action_number on " + converter.schema_name + ".abis" + R"((action_number))");
       t.exec("create index abis_account on " + converter.schema_name + ".abis" + R"((account))");
-
-   //   for (auto& table : connection->abi.tables) {
-   //     std::vector<std::string> keys = {"block_num", "present"};
-   //     keys.insert(keys.end(), table.key_names.begin(), table.key_names.end());
-   //     converter.create_table(table.type, get_type(table.type), "block_num bigint, present smallint", keys, exec);
-   //   }
 
       t.commit();
     }
@@ -882,7 +858,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
         std::string scope = values.at(3);
         std::string table_name = values.at(4);
 
-	std::string command = "/usr/bin/psql -U postgres -h 172.17.0.3 -qtAX -c \"select table_row_number from chain.table_rows where account = '" + account + "' and scope = '" + scope + "' and table_name = '" + table_name + "' limit 1\"";
+        std::string command = "/usr/bin/psql -U postgres -h 172.17.0.3 -qtAX -c \"select table_row_number from chain.table_rows where account = '" + account + "' and scope = '" + scope + "' and table_name = '" + table_name + "' limit 1\"";
         std::string command_output = get_command_line_output(command);
 
         table_row_number = stoi(command_output);
@@ -1067,13 +1043,13 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
         write_permissions(block_number, trace.act.authorization);
 
         if (trace.act.name.to_string() == "setabi")	
-	{
-	  write_abi(block_number, trace.act.account.to_string(), trace.act.name.to_string(), hex_data);
-	}
-	else
-	{
+        {
+          write_abi(block_number, trace.act.account.to_string(), trace.act.name.to_string(), hex_data);
+        }
+        else
+        {
           write_action_data(block_number, trace.act.account.to_string(), trace.act.name.to_string(), hex_data);
-	}
+        }
 
       }
     }
@@ -1117,27 +1093,27 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
     }
   } //write_abi
 
-   void set_abi_hex(eosio::name const &account, std::string const &hex_data)
-   {
-     try {
-       auto context = get_abieos_context();
-       nlohmann::json json = get_json("eosio", "setabi", hex_data);
-       std::string abi_hex;
-       for (auto itr = json.begin(); itr != json.end(); ++itr)
-       {
-         if (itr.key() == "abi")
-         {
-           abi_hex = itr.value().dump().c_str();
-           abi_hex.erase(remove(abi_hex.begin(), abi_hex.end(), '"'), abi_hex.end());
-         }
-       }
-       abieos_set_abi_hex(context, account.value, abi_hex.c_str());
-     }
-     catch (...) {
-       elog("set abi hex failed");
-       throw;
-     }
-   }
+  void set_abi_hex(eosio::name const &account, std::string const &hex_data)
+  {
+    try {
+      auto context = get_abieos_context();
+      nlohmann::json json = get_json("eosio", "setabi", hex_data);
+      std::string abi_hex;
+      for (auto itr = json.begin(); itr != json.end(); ++itr)
+      {
+        if (itr.key() == "abi")
+        {
+          abi_hex = itr.value().dump().c_str();
+          abi_hex.erase(remove(abi_hex.begin(), abi_hex.end(), '"'), abi_hex.end());
+        }
+      }
+      abieos_set_abi_hex(context, account.value, abi_hex.c_str());
+    }
+    catch (...) {
+      elog("set abi hex failed");
+      throw;
+    }
+  }
 
   nlohmann::json get_json(std::string const &action_account, std::string const &action_name, std::string const &action_data)
   {

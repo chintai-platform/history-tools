@@ -763,11 +763,11 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
             auto                     bin = opq.get();
             converter.to_sql_values(bin, *abi_type.as_struct(), values);
             // Get rid of producer 3, confirmed 4, schedule_version 8, new_producers 9, header extensions 10
-	    values.erase(values.begin() + 3);
-	    values.erase(values.begin() + 4);
-	    values.erase(values.begin() + 8);
-	    values.erase(values.begin() + 9);
-	    values.erase(values.begin() + 10);
+            values.erase(values.begin() + 10);
+            values.erase(values.begin() + 9);
+            values.erase(values.begin() + 8);
+            values.erase(values.begin() + 4);
+            values.erase(values.begin() + 3);
 
             write_stream(block_num, "blocks", values);
         } catch (...) {

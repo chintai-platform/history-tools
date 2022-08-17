@@ -1208,14 +1208,10 @@ void fill_pg_plugin::plugin_initialize(const variables_map& options) {
         if (api_endpoint.find(':') == std::string::npos)
             throw std::runtime_error("invalid API endpoint: " + api_endpoint);
 
-        auto endpoint_port        = endpoint.substr(endpoint.find(':') + 1, endpoint.size());
-        auto endpoint_host        = endpoint.substr(0, endpoint.find(':'));
-        my->config->endpoint_host = endpoint_host;
-        my->config->endpoint_port = endpoint_port;
-        auto api_port             = api_endpoint.substr(api_endpoint.find(':') + 1, api_endpoint.size());
-        auto api_host             = api_endpoint.substr(0, api_endpoint.find(':'));
-        my->config->api_host      = api_host;
-        my->config->api_port      = api_port;
+        my->config->endpoint_host = endpoint.substr(0, endpoint.find(':'));
+        my->config->endpoint_port = endpoint.substr(endpoint.find(':') + 1, endpoint.size());
+        my->config->api_host      = api_endpoint.substr(0, api_endpoint.find(':'));
+        my->config->api_port      = api_endpoint.substr(api_endpoint.find(':') + 1, api_endpoint.size());
         my->config->schema        = options["pg-schema"].as<std::string>();
         my->config->skip_to       = options.count("fill-skip-to") ? options["fill-skip-to"].as<uint32_t>() : 0;
         my->config->stop_before   = options.count("fill-stop") ? options["fill-stop"].as<uint32_t>() : 0;

@@ -365,40 +365,38 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
             t.exec(
                 "create table " + converter.schema_name + ".abis " +
                 R"((abi_number BIGINT PRIMARY KEY, action_number BIGINT, account CHAR(12), abi TEXT))");
-		
-	    // index_name -> {table_name, attribute_name}
-	    std::unordered_map<std::string, std::vector<std::string>> tables_indexes = {
-		{"block_index_timestamp", {"blocks", "timestamp"}},
-		{"block_index_id", {"blocks", "block_id"}},
-		{"transaction_index_block", {"transactions", "block_number"}},
-		{"action_transaction", {"actions", "transaction_number"}},
-		{"action_receiver", {"actions", "receiver"}},
-		{"action_account", {"actions", "action_account"}},
-		{"action_name", {"actions", "action_name"}},
-		{"action_data_action_number", {"action_data", "action_number"}},
-		{"action_data_key", {"action_data", "key"}},
-		{"action_data_value", {"action_data", "value"}},
-		{"table_rows_account", {"table_rows", "account"}},
-		{"table_rows_scope", {"table_rows", "scope"}},
-		{"table_rows_table", {"table_rows", "table_name"}},
-		{"table_rows_pk", {"table_rows", "primary_key"}},
-		{"table_row_data_table_row_number", {"table_row_data", "table_row_number"}},
-		{"table_row_data_block", {"table_row_data", "block_number"}},
-		{"table_row_data_key", {"table_row_data", "key"}},
-		{"table_row_data_value", {"table_row_data", "value"}},
-		{"permissions_action_number", {"permissions", "action_number"}},
-		{"permissions_actor", {"permissions", "actor"}},
-		{"abis_action_number", {"abis", "action_number"}},
-		{"abis_account", {"abis", "account"}}
-	    };
 
-	    for (const auto& [key, value] : tables_indexes) {
-		t.exec("create index idx_" + key + " on " + converter.schema_name + "." + value.at(0) + "(" + value.at(1) + ")");
-	    }
+            // index_name -> {table_name, attribute_name}
+            std::unordered_map<std::string, std::vector<std::string>> tables_indexes = {
+                {"block_index_timestamp", {"blocks", "timestamp"}},
+                {"block_index_id", {"blocks", "block_id"}},
+                {"transaction_index_block", {"transactions", "block_number"}},
+                {"action_transaction", {"actions", "transaction_number"}},
+                {"action_receiver", {"actions", "receiver"}},
+                {"action_account", {"actions", "action_account"}},
+                {"action_name", {"actions", "action_name"}},
+                {"action_data_action_number", {"action_data", "action_number"}},
+                {"action_data_key", {"action_data", "key"}},
+                {"action_data_value", {"action_data", "value"}},
+                {"table_rows_account", {"table_rows", "account"}},
+                {"table_rows_scope", {"table_rows", "scope"}},
+                {"table_rows_table", {"table_rows", "table_name"}},
+                {"table_rows_pk", {"table_rows", "primary_key"}},
+                {"table_row_data_table_row_number", {"table_row_data", "table_row_number"}},
+                {"table_row_data_block", {"table_row_data", "block_number"}},
+                {"table_row_data_key", {"table_row_data", "key"}},
+                {"table_row_data_value", {"table_row_data", "value"}},
+                {"permissions_action_number", {"permissions", "action_number"}},
+                {"permissions_actor", {"permissions", "actor"}},
+                {"abis_action_number", {"abis", "action_number"}},
+                {"abis_account", {"abis", "account"}}};
 
+            for (const auto& [key, value] : tables_indexes) {
+                t.exec("create index idx_" + key + " on " + converter.schema_name + "." + value.at(0) + "(" + value.at(1) + ")");
+            }
 
             // create chintai indices
-	    /*
+            /*
             t.exec("create index block_index_timestamp on " + converter.schema_name + ".blocks" + R"((timestamp))");
             t.exec("create index block_index_id on " + converter.schema_name + ".blocks" + R"((block_id))");
             t.exec("create index transaction_index_block on " + converter.schema_name + ".transactions" + R"((block_number))");
@@ -422,7 +420,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
             t.exec("create index permissions_actor on " + converter.schema_name + ".permissions" + R"((actor))");
             t.exec("create index abis_action_number on " + converter.schema_name + ".abis" + R"((action_number))");
             t.exec("create index abis_account on " + converter.schema_name + ".abis" + R"((account))");
-	    */
+        */
 
             t.commit();
         } catch (...) {
@@ -737,21 +735,20 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
             auto& ts = table_streams[name];
             if (!ts) {
 
-		std::unordered_map<std::string, std::vector<std::string>> condition = {
-		    {"transactions", {"transaction_number", "block_number", "transaction_ordinal", "id", "status"}},
-		    {"actions", {"action_number", "transaction_number", "action_ordinal", "creator_action_ordinal",
-                               "receiver",      "action_account",     "action_name",    "context_free",
-                               "console"}},
-		    {"action_data", {"action_data_number", "action_number", "key", "value"}},
-		    {"table_rows", {"table_row_number", "account", "scope", "table_name", "primary_key"}},
-		    {"table_row_data_number", {"table_row_data_number", "table_row_number", "block_number", "key", "value"}},
-		    {"permissions", {"permission_number", "action_number", "actor", "permission"}},
-		    {"abis", {"abi_number", "action_number", "account", "abi"}}
-		};
+                std::unordered_map<std::string, std::vector<std::string>> condition = {
+                    {"transactions", {"transaction_number", "block_number", "transaction_ordinal", "id", "status"}},
+                    {"actions",
+                     {"action_number", "transaction_number", "action_ordinal", "creator_action_ordinal", "receiver", "action_account",
+                      "action_name", "context_free", "console"}},
+                    {"action_data", {"action_data_number", "action_number", "key", "value"}},
+                    {"table_rows", {"table_row_number", "account", "scope", "table_name", "primary_key"}},
+                    {"table_row_data_number", {"table_row_data_number", "table_row_number", "block_number", "key", "value"}},
+                    {"permissions", {"permission_number", "action_number", "actor", "permission"}},
+                    {"abis", {"abi_number", "action_number", "account", "abi"}}};
 
                 ts = std::make_unique<table_stream>(converter.schema_name + "." + quote_name(name), condition[name]);
 
-		/*
+                /*
                 std::vector<std::string> columns;
                 if (name == "transactions") {
                     columns = {"transaction_number", "block_number", "transaction_ordinal", "id", "status"};
@@ -772,8 +769,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
                 }
 
                 ts = std::make_unique<table_stream>(converter.schema_name + "." + quote_name(name), columns);
-		*/
-
+        */
             }
             ts->writer.write_raw_line(boost::algorithm::join(values, "\t"));
         } catch (...) {
@@ -1121,16 +1117,17 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
     }
 
     nlohmann::json get_json(std::string const& action_account, std::string const& action_name, std::string const& action_data) {
-        std::string command =
-            "/usr/bin/cleos -u http://" + my->config->host + ":8888 convert unpack_action_data " + action_account + " " + action_name + " " + action_data;
-            // "/usr/bin/cleos -u http://10.254.1.2:8888 convert unpack_action_data " + action_account + " " + action_name + " " + action_data;
+        std::string command = "/usr/bin/cleos -u http://" + my->config->host + ":8888 convert unpack_action_data " + action_account + " " +
+                              action_name + " " + action_data;
+        // "/usr/bin/cleos -u http://10.254.1.2:8888 convert unpack_action_data " + action_account + " " + action_name + " " + action_data;
         std::string command_output = get_command_line_output(command);
 
         nlohmann::json command_json = nlohmann::json::parse(command_output);
         return command_json;
     }
 
-    void write_action_data(uint32_t const block_number, std::string const& action_account, std::string const& action_name, std::string const& action_data) {
+    void write_action_data(
+        uint32_t const block_number, std::string const& action_account, std::string const& action_name, std::string const& action_data) {
         try {
             nlohmann::json command_json = get_json(action_account, action_name, action_data);
 
@@ -1153,13 +1150,13 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
     std::string get_command_line_output(std::string command) {
         const char* char_command = command.c_str();
 
-	/*
+        /*
         int         exit_code    = system(char_command);
         if (exit_code) {
             elog("Executing a command on the command line failed");
             throw;
         }
-	*/
+    */
 
         std::array<char, 128>                    buffer;
         std::string                              result;
@@ -1170,7 +1167,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
         while (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr) {
             result += buffer.data();
         }
-	// std::cout << result <<std::endl;
+        // std::cout << result <<std::endl;
         return result;
     }
 

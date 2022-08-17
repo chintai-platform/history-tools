@@ -54,6 +54,17 @@ struct abieos_context_s {
     std::map<abieos::name, abieos::abi> contracts{};
 };
 
+std::unordered_map<std::string, std::vector<std::string>> write_stream_custom_columns = {
+    {"transactions", {"transaction_number", "block_number", "transaction_ordinal", "id", "status"}},
+    {"actions",
+     {"action_number", "transaction_number", "action_ordinal", "creator_action_ordinal", "receiver", "action_account", "action_name",
+      "context_free", "console"}},
+    {"action_data", {"action_data_number", "action_number", "key", "value"}},
+    {"table_rows", {"table_row_number", "account", "scope", "table_name", "primary_key"}},
+    {"table_row_data_number", {"table_row_data_number", "table_row_number", "block_number", "key", "value"}},
+    {"permissions", {"permission_number", "action_number", "actor", "permission"}},
+    {"abis", {"abi_number", "action_number", "account", "abi"}}};
+
 /// create singleton of abieos context
 abieos_context* my_abieos_context = nullptr;
 abieos_context* get_abieos_context() {
@@ -181,6 +192,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
     fill_postgresql_plugin_impl*                         my = nullptr;
     std::shared_ptr<fill_postgresql_config>              config;
     std::optional<pqxx::connection>                      sql_connection;
+    std::optional<pqxx::connection>                      read_sql_connection;
     std::shared_ptr<state_history::connection>           connection;
     bool                                                 created_trim    = false;
     uint32_t                                             head            = 0;
@@ -192,6 +204,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
     std::map<std::string, std::unique_ptr<table_stream>> table_streams;
     abieos_sql_converter                                 converter;
     std::map<std::string, eosio::abi_type>               abi_types;
+    std::string                                          cleos_command;
 
     fpg_session(fill_postgresql_plugin_impl* my)
         : my(my)
@@ -199,6 +212,9 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
 
         ilog("connect to postgresql");
         sql_connection.emplace();
+        read_sql_connection.emplace();
+
+        cleos_command = "/usr/bin/cleos -u http://" + my->config->api_host + ":" + my->config->api_port;
 
         using basic_types = std::tuple<
             bool, uint8_t, int8_t, uint16_t, int16_t, uint32_t, int32_t, uint64_t, int64_t, double, std::string, unsigned __int128,
@@ -366,6 +382,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
                 "create table " + converter.schema_name + ".abis " +
                 R"((abi_number BIGINT PRIMARY KEY, action_number BIGINT, account CHAR(12), abi TEXT))");
 
+            // create chintai indices
             // index_name -> {table_name, attribute_name}
             std::unordered_map<std::string, std::vector<std::string>> tables_indexes = {
                 {"block_index_timestamp", {"blocks", "timestamp"}},
@@ -394,33 +411,6 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
             for (const auto& [key, value] : tables_indexes) {
                 t.exec("create index idx_" + key + " on " + converter.schema_name + "." + value.at(0) + "(" + value.at(1) + ")");
             }
-
-            // create chintai indices
-            /*
-            t.exec("create index block_index_timestamp on " + converter.schema_name + ".blocks" + R"((timestamp))");
-            t.exec("create index block_index_id on " + converter.schema_name + ".blocks" + R"((block_id))");
-            t.exec("create index transaction_index_block on " + converter.schema_name + ".transactions" + R"((block_number))");
-            t.exec("create index action_transaction on " + converter.schema_name + ".actions" + R"((transaction_number))");
-            t.exec("create index action_receiver on " + converter.schema_name + ".actions" + R"((receiver))");
-            t.exec("create index action_account on " + converter.schema_name + ".actions" + R"((action_account))");
-            t.exec("create index action_name on " + converter.schema_name + ".actions" + R"((action_name))");
-            t.exec("create index action_data_action_number on " + converter.schema_name + ".action_data" + R"((action_number))");
-            t.exec("create index action_data_key on " + converter.schema_name + ".action_data" + R"((key))");
-            t.exec("create index action_data_value on " + converter.schema_name + ".action_data" + R"((value))");
-            t.exec("create index table_rows_account on " + converter.schema_name + ".table_rows" + R"((account))");
-            t.exec("create index table_rows_scope on " + converter.schema_name + ".table_rows" + R"((scope))");
-            t.exec("create index table_rows_table on " + converter.schema_name + ".table_rows" + R"((table_name))");
-            t.exec("create index table_rows_pk on " + converter.schema_name + ".table_rows" + R"((primary_key))");
-            t.exec(
-                "create index table_row_data_table_row_number on " + converter.schema_name + ".table_row_data" + R"((table_row_number))");
-            t.exec("create index table_row_data_block on " + converter.schema_name + ".table_row_data" + R"((block_number))");
-            t.exec("create index table_row_data_key on " + converter.schema_name + ".table_row_data" + R"((key))");
-            t.exec("create index table_row_data_value on " + converter.schema_name + ".table_row_data" + R"((value))");
-            t.exec("create index permissions_action_number on " + converter.schema_name + ".permissions" + R"((action_number))");
-            t.exec("create index permissions_actor on " + converter.schema_name + ".permissions" + R"((actor))");
-            t.exec("create index abis_action_number on " + converter.schema_name + ".abis" + R"((action_number))");
-            t.exec("create index abis_account on " + converter.schema_name + ".abis" + R"((account))");
-        */
 
             t.commit();
         } catch (...) {
@@ -544,7 +534,6 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
             $$ language plpgsql;
         )";
 
-        // std::cout << query << "\n\n";
         t.exec(query);
         t.commit();
         created_trim = true;
@@ -590,9 +579,9 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
         std::string query{
             "delete from " + converter.schema_name + "." + quote_name("blocks") + " where block_number >= " + std::to_string(block)};
         pipeline.insert(query);
-        std::string query1{
-            "delete from " + converter.schema_name + "." + quote_name("transactions") + " where block_number >= " + std::to_string(block)};
-        pipeline.insert(query1);
+        query =
+            "delete from " + converter.schema_name + "." + quote_name("transactions") + " where block_number >= " + std::to_string(block);
+        pipeline.insert(query);
 
         auto result = pipeline.retrieve(pipeline.insert(
             "select block_id from " + converter.schema_name + ".received_block where block_num=" + std::to_string(block - 1)));
@@ -735,41 +724,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
             auto& ts = table_streams[name];
             if (!ts) {
 
-                std::unordered_map<std::string, std::vector<std::string>> condition = {
-                    {"transactions", {"transaction_number", "block_number", "transaction_ordinal", "id", "status"}},
-                    {"actions",
-                     {"action_number", "transaction_number", "action_ordinal", "creator_action_ordinal", "receiver", "action_account",
-                      "action_name", "context_free", "console"}},
-                    {"action_data", {"action_data_number", "action_number", "key", "value"}},
-                    {"table_rows", {"table_row_number", "account", "scope", "table_name", "primary_key"}},
-                    {"table_row_data_number", {"table_row_data_number", "table_row_number", "block_number", "key", "value"}},
-                    {"permissions", {"permission_number", "action_number", "actor", "permission"}},
-                    {"abis", {"abi_number", "action_number", "account", "abi"}}};
-
-                ts = std::make_unique<table_stream>(converter.schema_name + "." + quote_name(name), condition[name]);
-
-                /*
-                std::vector<std::string> columns;
-                if (name == "transactions") {
-                    columns = {"transaction_number", "block_number", "transaction_ordinal", "id", "status"};
-                } else if (name == "actions") {
-                    columns = {"action_number", "transaction_number", "action_ordinal", "creator_action_ordinal",
-                               "receiver",      "action_account",     "action_name",    "context_free",
-                               "console"};
-                } else if (name == "action_data") {
-                    columns = {"action_data_number", "action_number", "key", "value"};
-                } else if (name == "table_rows") {
-                    columns = {"table_row_number", "account", "scope", "table_name", "primary_key"};
-                } else if (name == "table_row_data") {
-                    columns = {"table_row_data_number", "table_row_number", "block_number", "key", "value"};
-                } else if (name == "permissions") {
-                    columns = {"permission_number", "action_number", "actor", "permission"};
-                } else if (name == "abis") {
-                    columns = {"abi_number", "action_number", "account", "abi"};
-                }
-
-                ts = std::make_unique<table_stream>(converter.schema_name + "." + quote_name(name), columns);
-        */
+                ts = std::make_unique<table_stream>(converter.schema_name + "." + quote_name(name), write_stream_custom_columns[name]);
             }
             ts->writer.write_raw_line(boost::algorithm::join(values, "\t"));
         } catch (...) {
@@ -808,11 +763,11 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
             auto                     bin = opq.get();
             converter.to_sql_values(bin, *abi_type.as_struct(), values);
             // Get rid of producer 3, confirmed 4, schedule_version 8, new_producers 9, header extensions 10
-            values.erase(values.begin() + 10);
-            values.erase(values.begin() + 9);
-            values.erase(values.begin() + 8);
-            values.erase(values.begin() + 4);
-            values.erase(values.begin() + 3);
+	    values.erase(values.begin() + 3);
+	    values.erase(values.begin() + 4);
+	    values.erase(values.begin() + 8);
+	    values.erase(values.begin() + 9);
+	    values.erase(values.begin() + 10);
 
             write_stream(block_num, "blocks", values);
         } catch (...) {
@@ -882,12 +837,19 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
                 std::string scope      = values.at(3);
                 std::string table_name = values.at(4);
 
-                std::string command =
-                    "/usr/bin/psql -U postgres -h 10.254.1.2 -qtAX -c \"select table_row_number from chain.table_rows where account = '" +
-                    account + "' and scope = '" + scope + "' and table_name = '" + table_name + "' limit 1\"";
-                std::string command_output = get_command_line_output(command);
+                work_t t(*read_sql_connection);
 
-                table_row_number = stoi(command_output);
+                std::string query{
+                    "select table_row_number from chain.table_rows where account = '" + account + "' and scope = '" + scope +
+                    "' and table_name = '" + table_name + "' limit 1"};
+
+                auto table_row_number_raw = t.exec(query);
+                t.commit();
+                if (!table_row_number_raw.empty()) {
+                    table_row_number = table_row_number_raw[0][0].as<int64_t>();
+                } else {
+                    throw string("table_row_number_raw is empty");
+                }
             }
 
             write_table_row_data(block_num, values, table_row_number);
@@ -902,13 +864,23 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
             auto context = get_abieos_context();
 
             // make sure the abi is loaded into the context, add it if not
+            std::string hex_data;
             eosio::name contract     = eosio::name{values.at(2)};
             uint64_t    contract_int = eosio::name{values.at(2)}.value;
             auto        contract_itr = context->contracts.find(::abieos::name{contract_int});
             if (contract_itr == context->contracts.end()) {
-                std::string command = "/usr/bin/psql -U postgres -h 10.254.1.2 -qtAX -c \"select abi from chain.abis where account = '" +
-                                      contract.to_string() + "' order by abi_number desc limit 1\"";
-                std::string hex_data = get_command_line_output(command);
+                work_t t(*read_sql_connection);
+
+                std::string query{
+                    "select abi from chain.abis where account = '" + contract.to_string() + "' order by abi_number desc limit 1"};
+
+                auto hex_data_raw = t.exec(query);
+                t.commit();
+                if (!hex_data_raw.empty()) {
+                    hex_data = hex_data_raw[0][0].as<int64_t>();
+                } else {
+                    throw string("hex_data_raw is empty");
+                }
 
                 set_abi_hex(contract, hex_data);
             }
@@ -940,11 +912,16 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
 
     void write_table_row(uint32_t const block_num, std::vector<std::string> values) {
         try {
-            std::string command = "/usr/bin/psql -U postgres -h 10.254.1.2 -qtAX -c \"select * from chain.table_rows where account = '" +
-                                  values.at(2) + "' and scope = '" + values.at(3) + "' and table_name = '" + values.at(4) +
-                                  "' and primary_key = '" + values.at(5) + "' limit 1\"";
-            std::string command_output = get_command_line_output(command);
-            if (!command_output.empty()) {
+
+            work_t t(*read_sql_connection);
+
+            std::string query{
+                "select * from chain.table_rows where account = '" + values.at(2) + "' and scope = '" + values.at(3) +
+                "' and table_name = '" + values.at(4) + "' and primary_key = '" + values.at(5) + "' limit 1"};
+
+            auto chain_table_row_raw = t.exec(query);
+            t.commit();
+            if (!chain_table_row_raw.empty()) {
                 return;
             }
 
@@ -952,10 +929,9 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
 
             global_indexes.table_row_number++;
             table_row_values.push_back(std::to_string(global_indexes.table_row_number));
-            table_row_values.push_back(values.at(2));
-            table_row_values.push_back(values.at(3));
-            table_row_values.push_back(values.at(4));
-            table_row_values.push_back(values.at(5));
+            for (int i = 2; i <= 5; i++) {
+                table_row_values.push_back(values.at(i));
+            }
 
             write_stream_custom(block_num, "table_rows", table_row_values);
         } catch (...) {
@@ -1001,17 +977,15 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
             converter.to_sql_values(trace_bin, "transaction_trace", *get_type("transaction_trace").as_variant(), values);
 
             // delete unwanted values here.
-            values.erase(values.begin() + 14);
-            values.erase(values.begin() + 13);
-            values.erase(values.begin() + 12);
-            values.erase(values.begin() + 11);
-            values.erase(values.begin() + 10);
-            values.erase(values.begin() + 9);
-            values.erase(values.begin() + 8);
-            values.erase(values.begin() + 7);
-            values.erase(values.begin() + 6);
-            values.erase(values.begin() + 5);
-            values.erase(values.begin() + 4);
+            // std::vector<int> erase_index{4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14};
+
+	    for (int index = 14; index >= 4; index--) {
+                values.erase(values.begin() + index);
+	    }
+
+            // for (auto it = erase_index.rbegin(); it != erase_index.rend(); ++it) {
+            //     values.erase(values.begin() + *it);
+            // }
 
             global_indexes.transaction_number++;
             values.insert(values.begin(), std::to_string(global_indexes.transaction_number));
@@ -1117,9 +1091,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
     }
 
     nlohmann::json get_json(std::string const& action_account, std::string const& action_name, std::string const& action_data) {
-        std::string command = "/usr/bin/cleos -u http://" + my->config->host + ":8888 convert unpack_action_data " + action_account + " " +
-                              action_name + " " + action_data;
-        // "/usr/bin/cleos -u http://10.254.1.2:8888 convert unpack_action_data " + action_account + " " + action_name + " " + action_data;
+        std::string command = cleos_command + " convert unpack_action_data " + action_account + " " + action_name + " " + action_data;
         std::string command_output = get_command_line_output(command);
 
         nlohmann::json command_json = nlohmann::json::parse(command_output);
@@ -1150,14 +1122,6 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
     std::string get_command_line_output(std::string command) {
         const char* char_command = command.c_str();
 
-        /*
-        int         exit_code    = system(char_command);
-        if (exit_code) {
-            elog("Executing a command on the command line failed");
-            throw;
-        }
-    */
-
         std::array<char, 128>                    buffer;
         std::string                              result;
         std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(char_command, "r"), pclose);
@@ -1167,7 +1131,6 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
         while (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr) {
             result += buffer.data();
         }
-        // std::cout << result <<std::endl;
         return result;
     }
 
@@ -1250,12 +1213,20 @@ void fill_pg_plugin::plugin_initialize(const variables_map& options) {
     try {
         auto endpoint = options.at("fill-connect-to").as<std::string>();
         if (endpoint.find(':') == std::string::npos)
-            throw std::runtime_error("invalid endpoint: " + endpoint);
+            throw std::runtime_error("invalid state-history endpoint: " + endpoint);
 
-        auto port                 = endpoint.substr(endpoint.find(':') + 1, endpoint.size());
-        auto host                 = endpoint.substr(0, endpoint.find(':'));
-        my->config->host          = host;
-        my->config->port          = port;
+        auto api_endpoint = options.at("fill-api").as<std::string>();
+        if (api_endpoint.find(':') == std::string::npos)
+            throw std::runtime_error("invalid API endpoint: " + api_endpoint);
+
+        auto endpoint_port        = endpoint.substr(endpoint.find(':') + 1, endpoint.size());
+        auto endpoint_host        = endpoint.substr(0, endpoint.find(':'));
+        my->config->endpoint_host = endpoint_host;
+        my->config->endpoint_port = endpoint_port;
+        auto api_port             = api_endpoint.substr(api_endpoint.find(':') + 1, api_endpoint.size());
+        auto api_host             = api_endpoint.substr(0, api_endpoint.find(':'));
+        my->config->api_host      = api_host;
+        my->config->api_port      = api_port;
         my->config->schema        = options["pg-schema"].as<std::string>();
         my->config->skip_to       = options.count("fill-skip-to") ? options["fill-skip-to"].as<uint32_t>() : 0;
         my->config->stop_before   = options.count("fill-stop") ? options["fill-stop"].as<uint32_t>() : 0;

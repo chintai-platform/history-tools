@@ -896,12 +896,9 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
 
             for (auto itr = json.begin(); itr != json.end(); ++itr) {
                 global_indexes.table_row_data_number++;
-                std::vector<std::string> table_row_data_values;
-                table_row_data_values.push_back(std::to_string(global_indexes.table_row_data_number));
-                table_row_data_values.push_back(std::to_string(table_row_number));
-                table_row_data_values.push_back(std::to_string(block_num));
-                table_row_data_values.push_back(itr.key());
-                table_row_data_values.push_back(itr.value().dump());
+                std::vector<std::string> table_row_data_values{
+                    std::to_string(global_indexes.table_row_data_number), std::to_string(table_row_number), std::to_string(block_num),
+                    itr.key(), itr.value().dump()};
                 write_stream_custom(block_num, "table_row_data", table_row_data_values);
             }
         } catch (...) {
@@ -979,9 +976,9 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
             // delete unwanted values here.
             // std::vector<int> erase_index{4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14};
 
-	    for (int index = 14; index >= 4; index--) {
+            for (int index = 14; index >= 4; index--) {
                 values.erase(values.begin() + index);
-	    }
+            }
 
             // for (auto it = erase_index.rbegin(); it != erase_index.rend(); ++it) {
             //     values.erase(values.begin() + *it);
@@ -1012,15 +1009,15 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
                     continue;
                 }
 
-                std::vector<std::string> values{};
                 global_indexes.action_number++;
-                values.push_back(std::to_string(global_indexes.action_number));
-                values.push_back(std::to_string(global_indexes.transaction_number));
-                values.push_back(std::to_string(uint32_t(trace.action_ordinal)));
-                values.push_back(std::to_string(uint32_t(trace.creator_action_ordinal)));
-                values.push_back(trace.receiver.to_string());
-                values.push_back(trace.act.account.to_string());
-                values.push_back(trace.act.name.to_string());
+                std::vector<std::string> values{
+                    std::to_string(global_indexes.action_number),
+                    std::to_string(global_indexes.transaction_number),
+                    std::to_string(uint32_t(trace.action_ordinal)),
+                    std::to_string(uint32_t(trace.creator_action_ordinal)),
+                    trace.receiver.to_string(),
+                    trace.act.account.to_string(),
+                    trace.act.name.to_string()};
                 size_t         remaining_bytes = trace.act.data.remaining();
                 unsigned char* data            = new unsigned char[remaining_bytes];
                 trace.act.data.read(data, remaining_bytes);
@@ -1056,13 +1053,9 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
                 }
             }
 
-            std::vector<std::string> values{};
-
             global_indexes.abi_number++;
-            values.push_back(std::to_string(global_indexes.abi_number));
-            values.push_back(std::to_string(global_indexes.action_number));
-            values.push_back(account);
-            values.push_back(action_data);
+            std::vector<std::string> values{
+                std::to_string(global_indexes.abi_number), std::to_string(global_indexes.action_number), account, action_data};
             write_stream_custom(block_number, "abis", values);
 
             set_abi_hex(eosio::name{account}, action_data);
@@ -1104,13 +1097,11 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
             nlohmann::json command_json = get_json(action_account, action_name, action_data);
 
             for (auto itr = command_json.begin(); itr != command_json.end(); ++itr) {
-                std::vector<std::string> values{};
-
                 global_indexes.action_data_number++;
-                values.push_back(std::to_string(global_indexes.action_data_number));
-                values.push_back(std::to_string(global_indexes.action_number));
-                values.push_back(itr.key());
-                values.push_back(itr.value().dump());
+
+                std::vector<std::string> values{
+                    std::to_string(global_indexes.action_data_number), std::to_string(global_indexes.action_number), itr.key(),
+                    itr.value().dump()};
                 write_stream_custom(block_number, "action_data", values);
             }
         } catch (...) {
@@ -1136,14 +1127,12 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
 
     void write_permissions(uint32_t const block_number, std::vector<permission_level> const& authorizations) {
         for (int i = 0; i < authorizations.size(); ++i) {
-            std::vector<std::string> values{};
-            permission_level         current = authorizations.at(i);
+            permission_level current = authorizations.at(i);
             global_indexes.permission_number++;
 
-            values.push_back(std::to_string(global_indexes.permission_number));
-            values.push_back(std::to_string(global_indexes.action_number));
-            values.push_back(current.actor.to_string());
-            values.push_back(current.permission.to_string());
+            std::vector<std::string> values{
+                std::to_string(global_indexes.permission_number), std::to_string(global_indexes.action_number), current.actor.to_string(),
+                current.permission.to_string()};
 
             write_stream_custom(block_number, "permissions", values);
         }

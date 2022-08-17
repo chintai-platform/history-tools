@@ -877,7 +877,7 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
                 auto hex_data_raw = t.exec(query);
                 t.commit();
                 if (!hex_data_raw.empty()) {
-                    hex_data = hex_data_raw[0][0].as<int64_t>();
+                    hex_data = hex_data_raw[0][0].as<std::string>();
                 } else {
                     throw string("hex_data_raw is empty");
                 }

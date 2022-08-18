@@ -54,12 +54,12 @@ FetchContent_Declare(
   )
 FetchContent_MakeAvailable(appbase)
 
-FetchContent_Declare(
-  abieos
-  GIT_REPOSITORY https://github.com/EOSIO/abieos.git
-  GIT_TAG acde00fc7d4b743e599ced8886a013cb16cccbc2
-  )
-FetchContent_MakeAvailable(abieos)
+# FetchContent_Declare(
+#   abieos
+#   GIT_REPOSITORY https://github.com/EOSIO/abieos.git
+#   GIT_TAG acde00fc7d4b743e599ced8886a013cb16cccbc2
+#   )
+# FetchContent_MakeAvailable(abieos)
 
 FetchContent_Declare(
   libpqxx
@@ -79,6 +79,14 @@ FetchContent_Declare(
   )
 
 FetchContent_MakeAvailable(json)
+
+ FetchContent_Declare(
+   abieos 
+   GIT_REPOSITORY https://github.com/eosnetworkfoundation/mandel-abieos.git
+   GIT_TAG e5dad451c2b1cb58b0d53573ab98e5a8ed8455a6
+   )
+ 
+FetchContent_MakeAvailable(abieos)
 
 # Build Types
 set(CMAKE_BUILD_TYPE ${CMAKE_BUILD_TYPE}
@@ -109,11 +117,20 @@ set(WITH_TESTS OFF)
 
 add_compile_options(-Wno-error=shadow)
 
-add_executable(fill-pg src/main.cpp src/fill_plugin.cpp src/pg_plugin.cpp src/fill_pg_plugin.cpp src/abieos_sql_converter.cpp)
+add_executable(fill-pg src/main.cpp src/fill_plugin.cpp src/pg_plugin.cpp src/fill_pg_plugin.cpp src/abieos_sql_converter.cpp build/_deps/abieos-src/src/abi.cpp build/_deps/abieos-src/src/abieos.cpp build/_deps/abieos-src/src/crypto.cpp build/_deps/abieos-src/src/fuzzer.cpp build/_deps/abieos-src/src/ship.abi.cpp) 
 
 target_include_directories(fill-pg
   PRIVATE
   ${Boost_INCLUDE_DIR}
+  )
+
+target_include_directories(fill-pg
+  PRIVATE
+  build/_deps/abieos-src/src
+  )
+target_link_directories(fill-pg
+  PRIVATE
+  build/_deps/abieos-build
   )
 target_link_libraries(fill-pg nlohmann_json::nlohmann_json appbase fc abieos Boost::date_time Boost::filesystem Boost::chrono 
   Boost::system Boost::iostreams Boost::program_options Boost::unit_test_framework 

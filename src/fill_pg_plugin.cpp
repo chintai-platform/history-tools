@@ -365,22 +365,22 @@ struct fpg_session : connection_callbacks, std::enable_shared_from_this<fpg_sess
                 R"((transaction_number BIGINT PRIMARY KEY, block_number BIGINT, transaction_ordinal INT, id CHAR(64), status VARCHAR(12), UNIQUE(block_number, transaction_ordinal)))");
             t.exec(
                 "create table " + converter.schema_name + ".actions " +
-                R"((action_number BIGINT PRIMARY KEY, transaction_number BIGINT, action_ordinal INT, creator_action_ordinal INT, receiver CHAR(12), action_account CHAR(12), action_name CHAR(12), context_free BOOL, console TEXT, UNIQUE(transaction_number, action_ordinal)))");
+                R"((action_number BIGINT PRIMARY KEY, transaction_number BIGINT, action_ordinal INT, creator_action_ordinal INT, receiver VARCHAR(12), action_account VARCHAR(12), action_name VARCHAR(12), context_free BOOL, console TEXT, UNIQUE(transaction_number, action_ordinal)))");
             t.exec(
                 "create table " + converter.schema_name + ".action_data " +
                 R"((action_data_number BIGINT PRIMARY KEY, action_number BIGINT, key VARCHAR, value TEXT, UNIQUE(action_number, key)))");
             t.exec(
                 "create table " + converter.schema_name + ".table_rows " +
-                R"((table_row_number BIGINT PRIMARY KEY, account CHAR(12), scope CHAR(13), table_name CHAR(12), primary_key TEXT, UNIQUE(account, scope, table_name, primary_key)))");
+                R"((table_row_number BIGINT PRIMARY KEY, account VARCHAR(12), scope VARCHAR(13), table_name VARCHAR(12), primary_key TEXT, UNIQUE(account, scope, table_name, primary_key)))");
             t.exec(
                 "create table " + converter.schema_name + ".table_row_data " +
                 R"((table_row_data_number BIGINT PRIMARY KEY, table_row_number BIGINT, block_number BIGINT, key VARCHAR, value TEXT))");
             t.exec(
                 "create table " + converter.schema_name + ".permissions " +
-                R"((permission_number BIGINT PRIMARY KEY, action_number BIGINT, actor CHAR(12), permission CHAR(12)))");
+                R"((permission_number BIGINT PRIMARY KEY, action_number BIGINT, actor VARCHAR(12), permission VARCHAR(12)))");
             t.exec(
                 "create table " + converter.schema_name + ".abis " +
-                R"((abi_number BIGINT PRIMARY KEY, action_number BIGINT, account CHAR(12), abi TEXT))");
+                R"((abi_number BIGINT PRIMARY KEY, action_number BIGINT, account VARCHAR(12), abi TEXT))");
 
             // create chintai indices
             // index_name -> {table_name, attribute_name}

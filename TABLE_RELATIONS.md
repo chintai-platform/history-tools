@@ -1,4 +1,6 @@
 ```mermaid
+%%{init: {'theme':'neutral'}}%%
+
 erDiagram
 
 BLOCKS {
